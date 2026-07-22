@@ -1,0 +1,21 @@
+{
+  "extraKnownMarketplaces": {
+    "piercelamb-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "piercelamb/deep-plan"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+
+    "deep-project@piercelamb-plugins": true,
+    "deep-implement@piercelamb-plugins": true
+  }
+}

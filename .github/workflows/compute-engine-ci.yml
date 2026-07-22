@@ -1,0 +1,115 @@
+name: compute-engine-ci
+
+# The science pipeline, including the H2 -> FCI correctness gate.
+#
+# This job is where the PySCF-dependent tests actually execute. Developers on Windows see
+# them as skipped (PySCF publishes no Windows wheels), so this runner is the authority on
+# whether the committed golden reference is correct -- it recomputes the integrals from
+# first principles and asserts they match.
+
+on:
+  # Feature branches are included deliberately. Previously this ran only on `main` and on
+  # pull requests, so work on a long-lived branch like `feat/compute-engine-core` was
+  # never checked at all -- the H2 correctness gate cannot "fail the build" on a branch
+  # that never triggers a build.
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+    paths:
+      - "packages/compute-engine/**"
+      - "packages/qdr-core/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/compute-engine-ci.yml"
+  pull_request:
+    paths:
+      - "packages/compute-engine/**"
+      - "packages/qdr-core/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/compute-engine-ci.yml"
+
+concurrency:
+  group: compute-engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Linux specifically: PySCF ships manylinux and macOS wheels only.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync workspace with the chemistry group
+        # `--group chem`, not `--extra chem`: extras resolve against the root
+        # `[project]`, and this workspace root is virtual, so `--extra` silently
+        # installs nothing. The "Confirm PySCF is present" step below is what caught
+        # that; keep it.
+        run: uv sync --group chem --frozen
+
+      - name: Confirm PySCF is present
+        # If PySCF silently failed to install, every gate test would "pass" by being
+        # skipped. Fail loudly instead -- a green run that skipped the gate is worse
+        # than a red one.
+        run: uv run python -c "import pyscf; print('pyscf', pyscf.__version__)"
+
+      - name: Lint
+        run: uv run ruff check --config tools/lint/ruff.toml .
+
+      - name: Format check
+        run: uv run ruff format --check --config tools/lint/ruff.toml .
+
+      - name: Type check
+        run: uv run mypy packages/qdr-core/src packages/compute-engine/src
+
+      - name: Kernel tests
+        run: uv run pytest packages/qdr-core -q
+
+      - name: Engine tests with coverage
+        # pytest-cov has been a declared dependency all along without ever being invoked.
+        # The threshold is set just below the current level so it ratchets rather than
+        # blocks: it fails on a real drop, not on ordinary churn.
+        run: >
+          uv run pytest packages/compute-engine packages/qdr-core -q -rs
+          --cov=packages/compute-engine/src/qdr_compute_engine
+          --cov=packages/qdr-core/src/qdr_core
+          --cov-report=term-missing
+          --cov-report=xml
+          --cov-fail-under=80
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: warn
+
+      - name: Assert nothing was skipped
+        # On this runner every dependency is present, so a skip means a test quietly
+        # stopped running. The suite must be fully exercised somewhere, and this is it.
+        run: |
+          uv run pytest packages/compute-engine -q --no-header -rs 2>&1 | tee result.txt
+          if grep -qE "[0-9]+ skipped" result.txt; then
+            echo "::error::tests were skipped on a runner where all dependencies are installed"
+            grep -E "SKIPPED" result.txt || true
+            exit 1
+          fi
+
+      - name: H2 correctness gate
+        # Called out as its own step so a regression in the engine's physics is
+        # immediately legible in the checks list, not buried in the suite summary.
+        run: uv run pytest packages/compute-engine/tests/test_stage_00_fci_gate.py -v
+
+      - name: Golden reference is reproducible
+        # Regenerating must be a no-op. A diff here means the committed reference no
+        # longer matches what the code produces.
+        run: |
+          uv run python packages/compute-engine/tests/reference/generate_golden.py
+          git diff --exit-code packages/compute-engine/tests/golden/h2_fci_reference.json

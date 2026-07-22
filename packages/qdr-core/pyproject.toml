@@ -1,0 +1,16 @@
+[project]
+name = "qdr-core"
+version = "0.1.0"
+description = "QDR shared Python kernel: platform invariants, typed IDs, error taxonomy, content addressing."
+requires-python = ">=3.12"
+
+# Intentionally zero runtime dependencies. Every plane (control, compute, engine)
+# imports this package; a dependency here is a dependency everywhere.
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qdr_core"]

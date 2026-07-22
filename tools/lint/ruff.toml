@@ -1,0 +1,24 @@
+# Shared Python lint/format config. Referenced from the repo root via `ruff --config`.
+line-length = 100
+target-version = "py312"
+src = ["packages/qdr-core/src", "packages/compute-engine/src"]
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E741", # ambiguous variable names: `l` is standard notation for angular momentum
+]
+
+[lint.per-file-ignores]
+"**/tests/**" = ["E501"]
+
+[lint.isort]
+known-first-party = ["qdr_core", "qdr_compute_engine"]

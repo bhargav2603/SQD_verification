@@ -1,0 +1,48 @@
+# uv workspace root (virtual — the root itself is not a distributable package).
+#
+# Members are listed explicitly rather than globbed as `packages/*`: the remaining
+# scaffold manifests (apps/api, services/*) are still empty placeholders and an empty
+# pyproject.toml is not a valid uv member. `packages/contracts` is a JS package and
+# never becomes a Python member. Add members here as each subsystem is implemented.
+[tool.uv.workspace]
+members = [
+    "packages/qdr-core",
+    "packages/compute-engine",
+]
+
+[tool.uv.sources]
+qdr-core = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+# The chemistry stack, as a *root dependency group* rather than only as the
+# compute-engine's `chem` extra.
+#
+# Why both exist: `uv sync --extra chem` resolves extras against the root `[project]`,
+# and this workspace root is virtual -- it has no `[project]` table and therefore no
+# extras, so that command silently installs nothing and reports "no changes". The
+# platform marker hides the mistake on Windows, where PySCF would be excluded anyway.
+# A dependency group belongs to the workspace root itself, so `uv sync --group chem`
+# is unambiguous on every platform.
+#
+# The marker is kept: PySCF publishes manylinux and macOS wheels only, and the Windows
+# sdist requires a CMake toolchain and fails to build. Execution happens on Linux.
+chem = ["pyscf>=2.6; sys_platform != 'win32'"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/qdr-core/tests", "packages/compute-engine/tests"]
+markers = [
+    "requires_pyscf: test needs PySCF, which publishes no Windows wheels (auto-skipped off-Linux/macOS)",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+disallow_untyped_defs = true
+ignore_missing_imports = true

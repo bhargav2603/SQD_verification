@@ -1,0 +1,72 @@
+{
+  "_comment": "H2/STO-3G reference. Integrals computed analytically by tests/reference/sto3g_h2.py; e_fci is the lowest eigenvalue of the 4-qubit Hamiltonian, which is exact for this system. CI recomputes all of it with PySCF and asserts agreement.",
+  "molecule": "H2",
+  "basis": "sto-3g",
+  "bond_length_angstrom": 0.735,
+  "charge": 0,
+  "spin_multiplicity": 1,
+  "n_electrons": 2,
+  "n_orbitals": 2,
+  "n_qubits": 4,
+  "h2_notation": "physicist <pq|rs>",
+  "e_nuc": 0.7199689944258503,
+  "e_hf": -1.116998990391983,
+  "e_fci": -1.1373060283196201,
+  "correlation_energy": -0.020307037927637106,
+  "h1": [
+    [
+      -1.2563390661070892,
+      2.475630965859967e-16
+    ],
+    [
+      3.241493250746142e-16,
+      -0.4718959945338768
+    ]
+  ],
+  "h2": [
+    [
+      [
+        [
+          0.6757101473963452,
+          8.778213974266788e-18
+        ],
+        [
+          4.744136703437888e-18,
+          0.18093119390119397
+        ]
+      ],
+      [
+        [
+          -6.614993340589277e-17,
+          0.18093119390119405
+        ],
+        [
+          0.6645817086372392,
+          2.975700300539485e-16
+        ]
+      ]
+    ],
+    [
+      [
+        [
+          6.00317722550993e-17,
+          0.6645817086372393
+        ],
+        [
+          0.18093119390119397,
+          -3.177827707289427e-16
+        ]
+      ],
+      [
+        [
+          0.18093119390119405,
+          -4.962582629522445e-17
+        ],
+        [
+          -3.804030154116976e-17,
+          0.6985736849419051
+        ]
+      ]
+    ]
+  ]
+}
