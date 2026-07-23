@@ -134,6 +134,40 @@ def test_qdr_matches_casci_for_a_spin_projected_singlet() -> None:
 
 
 @pytest.mark.requires_pyscf
+def test_fef6_singlet_reference_matches_qdr() -> None:
+    """Regression: the [FeF6]4- singlet is a strongly correlated, highly excited state; a
+    single-root Davidson reference traps above the true minimum and fails the QDR cross-check
+    (QDR is exact in the sector). The multi-root, spin-screened FCI must reach the true
+    singlet so both engines agree to the runner's tolerance."""
+    from qdr_compute_engine.hamiltonian.fermionic_builder import (
+        build_fermionic_hamiltonian,
+    )
+    from qdr_compute_engine.hamiltonian.matrix_free import (
+        ground_state_energy_at_spin_sector_matrix_free,
+    )
+    from qdr_compute_engine.hamiltonian.spin_penalty import spin_penalized_hamiltonian
+    from qdr_compute_engine.mappers.jordan_wigner import map_to_qubits
+    from qdr_compute_engine.solvers.classical_baseline import (
+        alpha_beta_from_spin,
+        solve_fci,
+    )
+
+    result = avas_active_integrals(
+        _fef6(spin_multiplicity=1), ao_labels=["Fe 3d"], basis="sto-3g"
+    )
+    restricted = result.integrals
+
+    reference = solve_fci(restricted, spin_multiplicity=1)
+    assert reference.multiplicity == pytest.approx(1.0, abs=1e-3)  # a real singlet
+
+    hamiltonian = map_to_qubits(build_fermionic_hamiltonian(restricted))
+    hamiltonian = spin_penalized_hamiltonian(hamiltonian, spin_multiplicity=1)
+    n_alpha, n_beta = alpha_beta_from_spin(restricted.n_electrons, 1)
+    e_qdr = ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
+    assert e_qdr == pytest.approx(reference.energy, abs=1e-6)
+
+
+@pytest.mark.requires_pyscf
 def test_qdr_matches_casci_in_the_avas_space() -> None:
     """The runner's cross-check, on an AVAS selection: QDR engine == PySCF CASCI."""
     from qdr_compute_engine.hamiltonian.fermionic_builder import (
