@@ -195,9 +195,8 @@ def test_qdr_engine_matches_pyscf_on_an_open_shell_state() -> None:
 
     hamiltonian = map_to_qubits(build_fermionic_hamiltonian(restricted))
     n_alpha, n_beta = alpha_beta_from_spin(restricted.n_electrons, 3)
-    e_qdr = (
-        ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
-        + restricted.e_nuc
-    )
+    # e_nuc is already in the qubit Hamiltonian's identity term (via the InteractionOperator
+    # constant + Jordan-Wigner), so the eigenvalue is the total energy -- do not add it again.
+    e_qdr = ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
 
     assert e_qdr == pytest.approx(reference.energy, abs=1e-6)

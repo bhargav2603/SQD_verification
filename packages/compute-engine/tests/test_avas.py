@@ -28,6 +28,28 @@ def _o2(spin_multiplicity: int) -> Geometry:
     )
 
 
+def _fef6(spin_multiplicity: int) -> Geometry:
+    """Octahedral [FeF6]^4- -- a 4- transition-metal centre whose ROHF/RHF stalls DIIS."""
+    directions = [
+        (1, 0, 0),
+        (-1, 0, 0),
+        (0, 1, 0),
+        (0, -1, 0),
+        (0, 0, 1),
+        (0, 0, -1),
+    ]
+    bond = 2.00
+    atoms = (Atom("Fe", (0.0, 0.0, 0.0)),) + tuple(
+        Atom("F", (d[0] * bond, d[1] * bond, d[2] * bond)) for d in directions
+    )
+    return Geometry(
+        atoms=atoms,
+        charge=-4,
+        spin_multiplicity=spin_multiplicity,
+        units=LengthUnit.ANGSTROM,
+    )
+
+
 def test_empty_ao_labels_is_rejected() -> None:
     with pytest.raises(ValidationError, match="target valence orbitals"):
         avas_active_integrals(_o2(3), ao_labels=())
@@ -44,6 +66,21 @@ def test_avas_selects_a_nontrivial_space_for_o2() -> None:
     # The restricted integrals must span exactly the active orbitals.
     assert result.integrals.n_orbitals == result.active_space.n_active_orbitals
     assert result.integrals.n_electrons == result.active_space.n_active_electrons
+
+
+@pytest.mark.requires_pyscf
+def test_avas_converges_for_charged_transition_metal() -> None:
+    """Regression: [FeF6]^4- stalls first-order DIIS; the second-order fallback must
+    still converge it so AVAS selection does not wrongly raise 'unphysical state'."""
+    result = avas_active_integrals(
+        _fef6(spin_multiplicity=1), ao_labels=["Fe 3d"], basis="sto-3g"
+    )
+
+    # The Fe 3d shell is active by construction, so the space is non-trivial and the
+    # restricted integrals are self-consistent in size -- i.e. SCF actually converged.
+    assert result.active_space.n_active_orbitals >= 5  # the five 3d orbitals, at least
+    assert result.integrals.n_orbitals == result.active_space.n_active_orbitals
+    assert result.integrals.e_hf is not None
 
 
 @pytest.mark.requires_pyscf
@@ -71,8 +108,7 @@ def test_qdr_matches_casci_in_the_avas_space() -> None:
 
     hamiltonian = map_to_qubits(build_fermionic_hamiltonian(restricted))
     n_alpha, n_beta = alpha_beta_from_spin(restricted.n_electrons, 3)
-    e_qdr = (
-        ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
-        + restricted.e_nuc
-    )
+    # e_nuc is already in the qubit Hamiltonian's identity term (via the InteractionOperator
+    # constant + Jordan-Wigner), so the eigenvalue is the total energy -- do not add it again.
+    e_qdr = ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
     assert e_qdr == pytest.approx(reference.energy, abs=1e-6)

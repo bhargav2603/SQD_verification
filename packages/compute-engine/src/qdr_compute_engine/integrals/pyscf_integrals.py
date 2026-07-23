@@ -50,6 +50,35 @@ def _require_pyscf() -> Any:
     return pyscf
 
 
+def run_reference_scf(molecule: Any, *, max_cycle: int = 200) -> Any:
+    """Run the spin-free reference SCF for ``molecule``, robust to hard convergence.
+
+    RHF for closed shells, ROHF for open shells -- a *single* MO coefficient set either way,
+    so the MO-basis two-electron integrals stay spin-free and feed the same
+    ``(n_alpha, n_beta)`` CASCI/QDR machinery (see :func:`compute_integrals` on why UHF is
+    deliberately avoided).
+
+    Transition-metal complexes and highly charged anions (e.g. ``[FeF6]^4-``) have a dense,
+    near-degenerate 3d manifold that first-order DIIS routinely fails to converge from the
+    default guess -- the failure is *convergence*, not an unphysical state. When DIIS stalls
+    we hand its density to PySCF's second-order (Newton) solver, which is far more robust for
+    such systems; the caller inspects ``mean_field.converged`` to decide what a *final*
+    non-convergence means. Returns the (possibly Newton-wrapped) mean-field object, whose
+    ``mo_coeff`` / ``get_hcore`` / ``mo_energy`` / ``e_tot`` behave as usual.
+    """
+    from pyscf import scf
+
+    mean_field = scf.RHF(molecule) if molecule.spin == 0 else scf.ROHF(molecule)
+    mean_field.max_cycle = max_cycle
+    mean_field.kernel()
+    if not mean_field.converged:
+        # Second-order solver, seeded from the stalled first-order density so it starts
+        # from the best guess we have rather than the bare core Hamiltonian again.
+        mean_field = mean_field.newton()
+        mean_field.kernel(mean_field.mo_coeff, mean_field.mo_occ)
+    return mean_field
+
+
 def chemist_to_physicist(eri: NDArray[np.float64]) -> NDArray[np.float64]:
     """Convert ``(pq|rs)`` to ``<pq|rs>``.
 
@@ -79,7 +108,7 @@ def compute_integrals(
     here: its two coefficient sets would make the MO-basis two-electron integrals ambiguous.
     """
     pyscf = _require_pyscf()
-    from pyscf import ao2mo, scf
+    from pyscf import ao2mo
 
     molecule = pyscf.gto.Mole()
     molecule.atom = to_pyscf_atom_spec(geometry)
@@ -91,8 +120,8 @@ def compute_integrals(
     molecule.build()
 
     is_closed_shell = molecule.spin == 0
-    mean_field = scf.RHF(molecule) if is_closed_shell else scf.ROHF(molecule)
-    e_hf = float(mean_field.kernel())
+    mean_field = run_reference_scf(molecule)
+    e_hf = float(mean_field.e_tot)
     if not mean_field.converged:
         raise ValidationError(
             "SCF did not converge; the geometry or charge/spin state is likely unphysical",

@@ -27,6 +27,7 @@ from qdr_compute_engine.active_space.active_space_selector import restrict_integ
 from qdr_compute_engine.integrals.pyscf_integrals import (
     _require_pyscf,
     chemist_to_physicist,
+    run_reference_scf,
 )
 from qdr_compute_engine.geometry.pose_builder import to_pyscf_atom_spec
 from qdr_compute_engine.types import ActiveSpace, Geometry, IntegralSet
@@ -73,7 +74,7 @@ def avas_active_integrals(
         )
 
     pyscf = _require_pyscf()
-    from pyscf import ao2mo, scf
+    from pyscf import ao2mo
     from pyscf.mcscf import avas
 
     molecule = pyscf.gto.Mole()
@@ -85,8 +86,10 @@ def avas_active_integrals(
     molecule.verbose = verbose
     molecule.build()
 
-    mean_field = scf.RHF(molecule) if molecule.spin == 0 else scf.ROHF(molecule)
-    e_hf = float(mean_field.kernel())
+    # Robust SCF: [FeF6]^4- and other charged transition-metal centres routinely stall
+    # first-order DIIS, so this escalates to the second-order solver before giving up.
+    mean_field = run_reference_scf(molecule)
+    e_hf = float(mean_field.e_tot)
     if not mean_field.converged:
         raise ValidationError(
             "SCF did not converge; the geometry or charge/spin state is likely unphysical",

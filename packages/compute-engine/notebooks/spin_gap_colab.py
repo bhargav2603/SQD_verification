@@ -176,11 +176,13 @@ def _solve_state(case: SpinGapCase, state: SpinState) -> StateResult:
     reference = solve_fci(restricted, spin_multiplicity=state.spin_multiplicity)
 
     # (2) QDR's own engine: fermion -> qubit -> matrix-free, same active space + sector.
+    # restricted.e_nuc (nuclear repulsion + frozen-core shift) is already folded into the
+    # InteractionOperator's constant by build_fermionic_hamiltonian and carried into the
+    # qubit Hamiltonian's identity term by Jordan-Wigner, so the matrix-free eigenvalue is
+    # already the *total* energy. Adding e_nuc here would double-count it -- the golden H2
+    # sector test (test_open_shell.test_h2_singlet_sector_is_the_fci_energy) pins this.
     hamiltonian = map_to_qubits(build_fermionic_hamiltonian(restricted))
-    e_qdr = (
-        ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
-        + restricted.e_nuc
-    )
+    e_qdr = ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
 
     # The gate: a disagreement means the engine is wrong; do not report a gap built on it.
     if abs(e_qdr - reference.energy) > CROSS_CHECK_TOLERANCE:
