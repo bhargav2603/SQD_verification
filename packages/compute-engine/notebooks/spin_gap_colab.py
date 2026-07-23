@@ -46,6 +46,7 @@ from qdr_compute_engine.active_space.active_space_selector import (
     restrict_integrals,
     select_active_space,
 )
+from qdr_compute_engine.active_space.avas_selection import avas_active_integrals
 from qdr_compute_engine.hamiltonian.fermionic_builder import build_fermionic_hamiltonian
 from qdr_compute_engine.hamiltonian.matrix_free import (
     ground_state_energy_at_spin_sector_matrix_free,
@@ -79,6 +80,10 @@ class SpinGapCase:
     high_spin: SpinState
     n_active_electrons: int
     n_active_orbitals: int
+    #: AVAS target valence orbitals, e.g. ``("Fe 3d",)``. When set, the active space is
+    #: chosen by AVAS (the 3d shell is guaranteed active) and ``n_active_*`` above are
+    #: ignored -- AVAS decides the size. When ``None``, the index-window selector is used.
+    ao_labels: tuple[str, ...] | None = None
     #: Published complete-basis reference, kcal/mol (high - low). Context only.
     literature_cbs_kcal: float | None = None
 
@@ -148,13 +153,20 @@ def _solve_state(case: SpinGapCase, state: SpinState) -> StateResult:
         spin_multiplicity=state.spin_multiplicity,
         units=LengthUnit.ANGSTROM,
     )
-    integrals = compute_integrals(geometry, basis=case.basis)
-    active_space = select_active_space(
-        integrals,
-        n_active_orbitals=case.n_active_orbitals,
-        n_active_electrons=case.n_active_electrons,
-    )
-    restricted = restrict_integrals(integrals, active_space)
+    if case.ao_labels is not None:
+        # AVAS: the named valence shell (e.g. Fe 3d) is active by construction.
+        avas = avas_active_integrals(
+            geometry, ao_labels=case.ao_labels, basis=case.basis
+        )
+        restricted, active_space = avas.integrals, avas.active_space
+    else:
+        integrals = compute_integrals(geometry, basis=case.basis)
+        active_space = select_active_space(
+            integrals,
+            n_active_orbitals=case.n_active_orbitals,
+            n_active_electrons=case.n_active_electrons,
+        )
+        restricted = restrict_integrals(integrals, active_space)
 
     n_alpha, n_beta = alpha_beta_from_spin(
         restricted.n_electrons, state.spin_multiplicity
@@ -305,6 +317,10 @@ FE_OCTAHEDRAL = SpinGapCase(
     high_spin=SpinState("quintet", 5),
     n_active_electrons=6,
     n_active_orbitals=5,
+    # AVAS pins the active space to the Fe 3d shell -- the orbitals that carry the spin
+    # state -- instead of gambling on an index window. This is what makes the selection
+    # defensible; widen to ("Fe 3d", "Fe 4d") for the double-shell active space.
+    ao_labels=("Fe 3d",),
 )
 
 
