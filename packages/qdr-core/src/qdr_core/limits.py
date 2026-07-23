@@ -17,14 +17,15 @@ from typing import Final
 # The qubit ladder
 # --------------------------------------------------------------------------------------
 #
-# There are three different ceilings and they are *not* interchangeable. They used to be
+# There are four different ceilings and they are *not* interchangeable. They used to be
 # scattered -- 40 here, 24 hard-coded in the statevector driver, and two differently-named
 # constants (14 and 16) for the same idea in stage 9 and the benchmark runner. That drift
-# is exactly what this module exists to prevent, so all four now live here.
+# is exactly what this module exists to prevent, so all now live here.
 #
 #   MAX_QUBITS                  40   what the platform will schedule       (policy)
 #   MAX_DENSE_STATEVECTOR_QUBITS 24  what one worker will allocate         (memory)
-#   MAX_EXACT_REFERENCE_QUBITS   14  where the sparse Hamiltonian wins     (measured)
+#   MAX_EXACT_REFERENCE_QUBITS   24  where an exact reference is computed  (matrix-free)
+#   SPARSE_HAMILTONIAN_MAX_QUBITS 14 where the *sparse* Hamiltonian wins   (measured)
 #
 # Anything quoting a qubit ceiling must import one of these rather than restate it.
 
@@ -38,17 +39,21 @@ MAX_QUBITS: Final[int] = 40
 #: for the state itself. A backend is free to be more conservative than the platform.
 MAX_DENSE_STATEVECTOR_QUBITS: Final[int] = 24
 
-#: Largest register for which an *exact reference* is computed by materialising the sparse
-#: qubit Hamiltonian.
-#:
-#: Measured, not assumed. Sparse-Hamiltonian memory is ``n_terms * 2**n * 16`` bytes, which
-#: overtakes the statevector and becomes the binding constraint well before it does: a
-#: 16-qubit case required 5.66 GiB for the operator alone and failed there, not in the
-#: simulator. 14 qubits is the largest that completes comfortably on a 16 GB host.
-#:
-#: Raising this needs a matrix-free Hamiltonian application (apply Pauli strings directly
-#: to the statevector), not a bigger machine.
-MAX_EXACT_REFERENCE_QUBITS: Final[int] = 14
+#: Largest register for which an *exact reference* is computed. As of rung 3 this rides on
+#: the matrix-free Hamiltonian application (``hamiltonian/matrix_free.py``): applying Pauli
+#: strings directly to the ``2**n`` statevector costs ``O(2**n)`` memory -- the same as the
+#: simulator -- instead of the sparse operator's ``n_terms * 2**n``, so the reference now
+#: rises to the dense-statevector ceiling rather than dying far below it. Trades memory for
+#: time: above ``SPARSE_HAMILTONIAN_MAX_QUBITS`` a reference is feasible but no longer cheap.
+MAX_EXACT_REFERENCE_QUBITS: Final[int] = MAX_DENSE_STATEVECTOR_QUBITS
+
+#: Largest register for which materialising the *sparse* qubit Hamiltonian is the faster
+#: path. Measured, not assumed: sparse-Hamiltonian memory is ``n_terms * 2**n * 16`` bytes,
+#: which overtakes the statevector well before it does -- a 16-qubit case needed 5.66 GiB for
+#: the operator alone and failed there, not in the simulator. 14 qubits is the largest that
+#: completes comfortably on a 16 GB host, so at or below this the exact-reference path uses
+#: the sparse matrix and above it switches to matrix-free.
+SPARSE_HAMILTONIAN_MAX_QUBITS: Final[int] = 14
 
 #: Spin-orbital accounting: a spatial orbital contributes two spin orbitals, and the
 #: Jordan-Wigner family of mappings assigns one qubit per spin orbital.

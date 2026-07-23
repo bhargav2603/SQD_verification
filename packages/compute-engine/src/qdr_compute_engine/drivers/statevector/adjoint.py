@@ -51,6 +51,7 @@ so this handles the Trotterised ansatz without special-casing it.
 import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import LinearOperator
 
 from qdr_compute_engine.drivers.statevector.kernel import (
     State,
@@ -94,12 +95,16 @@ def _pauli_braket(lam: State, psi: State, pauli: str, qubit: int) -> complex:
 def energy_and_gradient(
     circuit: Circuit,
     params: NDArray[np.float64],
-    hamiltonian_sparse: csc_matrix,
+    hamiltonian_sparse: csc_matrix | LinearOperator,
 ) -> tuple[float, NDArray[np.float64]]:
     """Return ``(energy, gradient)`` for ``circuit`` at ``params``.
 
     ``gradient[i]`` is ``dE/dtheta_i``, exact to machine precision -- this is analytic
     differentiation, not a finite-difference approximation.
+
+    ``hamiltonian_sparse`` is only ever used as ``H @ psi`` (the single co-state seed), so a
+    matrix-free ``LinearOperator`` is accepted interchangeably with the sparse matrix -- which
+    is what lets the gradient path clear the 14-qubit wall alongside the reference (rung 3).
     """
     n_qubits = circuit.n_qubits
 

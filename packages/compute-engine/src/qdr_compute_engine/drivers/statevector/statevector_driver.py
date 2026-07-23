@@ -21,6 +21,7 @@ import numpy as np
 from numpy.typing import NDArray
 from openfermion import get_sparse_operator
 from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import LinearOperator
 
 from qdr_compute_engine.drivers.capabilities import BackendCapabilities
 from qdr_compute_engine.drivers.registry import register_backend
@@ -37,7 +38,7 @@ from qdr_compute_engine.types import (
     SolveResult,
 )
 from qdr_core.errors import ValidationError
-from qdr_core.limits import MAX_DENSE_STATEVECTOR_QUBITS
+from qdr_core.limits import MAX_DENSE_STATEVECTOR_QUBITS, SPARSE_HAMILTONIAN_MAX_QUBITS
 
 _INV_SQRT2 = 1.0 / math.sqrt(2.0)
 
@@ -143,7 +144,29 @@ def hamiltonian_matrix(hamiltonian: QubitHamiltonian) -> csc_matrix:
     return get_sparse_operator(hamiltonian.operator, n_qubits=hamiltonian.n_qubits)
 
 
-def expectation_value(hamiltonian_sparse: csc_matrix, state: NDArray[np.complex128]) -> float:
+def hamiltonian_apply_operator(
+    hamiltonian: QubitHamiltonian,
+) -> csc_matrix | LinearOperator:
+    """The object the driver applies as ``H @ psi``, sized to the register (rung 3).
+
+    At or below ``SPARSE_HAMILTONIAN_MAX_QUBITS`` this is the assembled sparse matrix -- the
+    faster path, and the historical behaviour bit-for-bit. Above it the sparse matrix no
+    longer fits (``n_terms * 2**n``), so a matrix-free ``LinearOperator`` takes over; it
+    exposes the identical ``@`` action, which is all the energy and adjoint-gradient paths
+    use, so nothing downstream needs to know which one it received.
+    """
+    if hamiltonian.n_qubits > SPARSE_HAMILTONIAN_MAX_QUBITS:
+        from qdr_compute_engine.hamiltonian.matrix_free import (
+            qubit_operator_as_linear_operator,
+        )
+
+        return qubit_operator_as_linear_operator(hamiltonian)
+    return hamiltonian_matrix(hamiltonian)
+
+
+def expectation_value(
+    hamiltonian_sparse: csc_matrix | LinearOperator, state: NDArray[np.complex128]
+) -> float:
     """``<psi|H|psi>`` for a Hermitian ``H``.
 
     The imaginary part is discarded after an explicit check -- for a Hermitian operator
@@ -183,15 +206,15 @@ class StatevectorDriver(SolverBackend):
         ansatz = request.ansatz
         assert ansatz is not None  # guaranteed by check_supported
 
-        sparse_hamiltonian = hamiltonian_matrix(request.hamiltonian)
+        hamiltonian_operator = hamiltonian_apply_operator(request.hamiltonian)
 
         def energy(params: NDArray[np.float64]) -> float:
-            return expectation_value(sparse_hamiltonian, simulate_statevector(ansatz, params))
+            return expectation_value(hamiltonian_operator, simulate_statevector(ansatz, params))
 
         def value_and_gradient(
             params: NDArray[np.float64],
         ) -> tuple[float, NDArray[np.float64]]:
-            return energy_and_gradient(ansatz, params, sparse_hamiltonian)
+            return energy_and_gradient(ansatz, params, hamiltonian_operator)
 
         initial = (
             request.initial_params
@@ -249,8 +272,19 @@ def exact_ground_state_energy(hamiltonian: QubitHamiltonian) -> float:
     active-space *effective* Hamiltonian it is not, and
     :func:`exact_ground_state_energy_at_particle_number` is the reference that matches
     CASCI.
+
+    Above ``SPARSE_HAMILTONIAN_MAX_QUBITS`` the sparse matrix no longer fits, so the
+    matrix-free path (rung 3) takes over; at or below it the sparse route is kept because it
+    is faster and gives the historical, verified answer bit-for-bit.
     """
     from scipy.sparse.linalg import eigsh
+
+    if hamiltonian.n_qubits > SPARSE_HAMILTONIAN_MAX_QUBITS:
+        from qdr_compute_engine.hamiltonian.matrix_free import (
+            ground_state_energy_matrix_free,
+        )
+
+        return ground_state_energy_matrix_free(hamiltonian)
 
     matrix = hamiltonian_matrix(hamiltonian)
     dimension = matrix.shape[0]
@@ -276,8 +310,18 @@ def exact_ground_state_energy_at_particle_number(
     so its *unconstrained* ground state can lie in a different sector entirely. Comparing
     that unconstrained value against CASCI is apples-to-oranges; this is the like-for-like
     reference.
+
+    Above ``SPARSE_HAMILTONIAN_MAX_QUBITS`` the matrix-free sector solve (rung 3) takes over;
+    at or below it the sparse block extraction is kept for speed and bit-for-bit continuity.
     """
     from scipy.sparse.linalg import eigsh
+
+    if hamiltonian.n_qubits > SPARSE_HAMILTONIAN_MAX_QUBITS:
+        from qdr_compute_engine.hamiltonian.matrix_free import (
+            ground_state_energy_at_particle_number_matrix_free,
+        )
+
+        return ground_state_energy_at_particle_number_matrix_free(hamiltonian, n_electrons)
 
     matrix = hamiltonian_matrix(hamiltonian).tocsr()
     dimension = matrix.shape[0]
