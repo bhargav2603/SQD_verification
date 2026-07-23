@@ -173,8 +173,13 @@ def ground_state_energy_at_spin_sector_matrix_free(
     Under the interleaved Jordan-Wigner convention this engine uses (spatial orbital ``p`` ->
     spin orbitals ``2p`` alpha, ``2p+1`` beta), a basis state's alpha count is its set bits on
     even qubits and its beta count is the set bits on odd qubits. Fixing both selects a fixed
-    ``S_z`` sector; the target spin state is then the lowest eigenvalue there (confirmed by an
-    ``<S^2>`` reading, which the PySCF reference reports alongside).
+    ``S_z`` sector.
+
+    Note this fixes only ``S_z``, not the total spin ``S``: the ``S_z = 0`` sector holds the
+    ``M_s = 0`` component of every spin, so the lowest eigenvalue there is the ground-state
+    spin, which need not be the one intended (a requested singlet can come back as a triplet).
+    Penalise ``S^2`` first (``hamiltonian/spin_penalty.py``) when the requested spin is not the
+    sector's ground state; the low-spin state of a spin gap is exactly that case.
     """
     n_qubits = hamiltonian.n_qubits
     dimension = 2**n_qubits

@@ -70,11 +70,13 @@ def alpha_beta_from_spin(n_electrons: int, spin_multiplicity: int) -> tuple[int,
 def solve_fci(integrals: IntegralSet, *, spin_multiplicity: int = 1) -> ClassicalResult:
     """Exact diagonalisation in the given orbital space, via PySCF's FCI solver.
 
-    ``spin_multiplicity`` selects the ``(n_alpha, n_beta)`` sector: the default ``1`` is the
-    closed-shell singlet and reproduces the original behaviour exactly. A high-spin state
-    (e.g. a quintet, ``spin_multiplicity=5``) is the mechanism behind a transition-metal spin
-    gap. ``<S^2>`` is returned so the caller can verify the solver landed on the spin state it
-    asked for rather than a lower-energy contaminant of the same ``S_z``.
+    ``spin_multiplicity`` selects the target spin. Fixing ``(n_alpha, n_beta)`` alone fixes
+    only ``S_z``, whose lowest state is whichever *total* spin is the ground state -- so a
+    requested singlet in the ``S_z = 0`` sector silently comes back as the ``M_s = 0``
+    component of a lower-lying triplet. To pin the actual spin we penalise wrong-``S^2``
+    states (PySCF's ``fix_spin_``): the penalty is zero on the target spin, so the returned
+    energy is physical, but it lifts contaminants out of the way. ``<S^2>`` is still returned
+    so the caller can confirm the solver landed where it asked.
     """
     _require_pyscf()
     from pyscf import fci
@@ -84,7 +86,11 @@ def solve_fci(integrals: IntegralSet, *, spin_multiplicity: int = 1) -> Classica
 
     eri_chemist = physicist_to_chemist(np.asarray(integrals.h2, dtype=float))
 
-    energy, civec = fci.direct_spin1.kernel(
+    spin = (spin_multiplicity - 1) / 2.0
+    target_s_squared = spin * (spin + 1.0)
+    solver = fci.direct_spin1.FCI()
+    fci.addons.fix_spin_(solver, ss=target_s_squared)
+    energy, civec = solver.kernel(
         np.asarray(integrals.h1, dtype=float),
         eri_chemist,
         n_orbitals,

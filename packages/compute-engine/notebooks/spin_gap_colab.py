@@ -51,6 +51,7 @@ from qdr_compute_engine.hamiltonian.fermionic_builder import build_fermionic_ham
 from qdr_compute_engine.hamiltonian.matrix_free import (
     ground_state_energy_at_spin_sector_matrix_free,
 )
+from qdr_compute_engine.hamiltonian.spin_penalty import spin_penalized_hamiltonian
 from qdr_compute_engine.integrals.pyscf_integrals import compute_integrals
 from qdr_compute_engine.mappers.jordan_wigner import map_to_qubits
 from qdr_compute_engine.solvers.classical_baseline import (
@@ -139,7 +140,13 @@ def _dft_energy(case: SpinGapCase, state: SpinState) -> float:
 
     mean_field = dft.RKS(molecule) if molecule.spin == 0 else dft.ROKS(molecule)
     mean_field.xc = "b3lyp"
+    mean_field.max_cycle = 200
     energy = float(mean_field.kernel())
+    if not mean_field.converged:
+        # Charged transition-metal centres (e.g. [FeF6]4-) stall first-order DIIS; hand the
+        # stalled density to the second-order (Newton) solver, matching the HF path.
+        mean_field = mean_field.newton()
+        energy = float(mean_field.kernel(mean_field.mo_coeff, mean_field.mo_occ))
     if not mean_field.converged:
         raise RuntimeError(f"B3LYP did not converge for {case.name} {state.label}")
     return energy
@@ -181,7 +188,14 @@ def _solve_state(case: SpinGapCase, state: SpinState) -> StateResult:
     # qubit Hamiltonian's identity term by Jordan-Wigner, so the matrix-free eigenvalue is
     # already the *total* energy. Adding e_nuc here would double-count it -- the golden H2
     # sector test (test_open_shell.test_h2_singlet_sector_is_the_fci_energy) pins this.
+    # The (n_alpha, n_beta) sector fixes only S_z, so a requested singlet would otherwise
+    # collapse onto a lower triplet's M_s=0 component; the S^2 penalty pins the actual spin
+    # without shifting its energy (see hamiltonian/spin_penalty.py), exactly as fix_spin_
+    # does for the CASCI reference above -- which is what keeps the cross-check honest.
     hamiltonian = map_to_qubits(build_fermionic_hamiltonian(restricted))
+    hamiltonian = spin_penalized_hamiltonian(
+        hamiltonian, spin_multiplicity=state.spin_multiplicity
+    )
     e_qdr = ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha, n_beta)
 
     # The gate: a disagreement means the engine is wrong; do not report a gap built on it.
