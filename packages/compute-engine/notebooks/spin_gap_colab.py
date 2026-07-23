@@ -59,7 +59,7 @@ from qdr_compute_engine.solvers.classical_baseline import (
     solve_fci,
 )
 from qdr_compute_engine.types import Atom, Geometry, LengthUnit
-from qdr_core.limits import HARTREE_TO_KCAL_PER_MOL
+from qdr_core.limits import HARTREE_TO_KCAL_PER_MOL, MAX_EXACT_REFERENCE_QUBITS
 
 #: QDR-vs-PySCF agreement demanded before any gap is reported (Hartree).
 CROSS_CHECK_TOLERANCE = 1e-6
@@ -85,6 +85,10 @@ class SpinGapCase:
     #: chosen by AVAS (the 3d shell is guaranteed active) and ``n_active_*`` above are
     #: ignored -- AVAS decides the size. When ``None``, the index-window selector is used.
     ao_labels: tuple[str, ...] | None = None
+    #: AVAS overlap threshold. Lower keeps more (weaker-overlap) orbitals active -- richer
+    #: physics but more qubits; raise it to shrink the space when it overruns the exact-
+    #: reference ceiling. ``None`` uses the AVAS default (0.2).
+    avas_threshold: float | None = None
     #: Published complete-basis reference, kcal/mol (high - low). Context only.
     literature_cbs_kcal: float | None = None
 
@@ -161,11 +165,24 @@ def _solve_state(case: SpinGapCase, state: SpinState) -> StateResult:
         units=LengthUnit.ANGSTROM,
     )
     if case.ao_labels is not None:
-        # AVAS: the named valence shell (e.g. Fe 3d) is active by construction.
+        # AVAS: the named valence shells (e.g. Fe 3d + F 2p) are active by construction.
+        avas_kwargs = {}
+        if case.avas_threshold is not None:
+            avas_kwargs["threshold"] = case.avas_threshold
         avas = avas_active_integrals(
-            geometry, ao_labels=case.ao_labels, basis=case.basis
+            geometry, ao_labels=case.ao_labels, basis=case.basis, **avas_kwargs
         )
         restricted, active_space = avas.integrals, avas.active_space
+        # The exact CASCI/QDR cross-check materialises a state vector per sector, so it is
+        # only feasible up to MAX_EXACT_REFERENCE_QUBITS. Fail early and specifically if the
+        # AVAS selection overruns that, rather than exhausting memory mid-solve.
+        if active_space.n_qubits > MAX_EXACT_REFERENCE_QUBITS:
+            raise ValueError(
+                f"AVAS selected {active_space.n_active_orbitals} orbitals "
+                f"({active_space.n_qubits} qubits) for {case.name} {state.label}, above the "
+                f"exact-reference ceiling of {MAX_EXACT_REFERENCE_QUBITS} qubits. Raise "
+                f"avas_threshold (currently {case.avas_threshold}) or trim ao_labels."
+            )
     else:
         integrals = compute_integrals(geometry, basis=case.basis)
         active_space = select_active_space(
@@ -230,10 +247,15 @@ def run_case(case: SpinGapCase) -> dict:
     gap_casci = (high.e_casci - low.e_casci) * to_kcal
     gap_dft = (high.e_dft - low.e_dft) * to_kcal
 
+    # Report the active space actually solved: for an AVAS case that is what AVAS chose, not
+    # the declared n_active_* (which AVAS ignores), so the printout never overstates the model.
+    active_orbitals = low.n_qubits // 2
+    active_electrons = low.n_alpha + low.n_beta
+    selection = f" via AVAS {case.ao_labels}" if case.ao_labels is not None else ""
     print(f"\n=== {case.name} ===")
     print(
-        f"active space: ({case.n_active_electrons}e, {case.n_active_orbitals}o) "
-        f"-> {low.n_qubits} qubits"
+        f"active space: ({active_electrons}e, {active_orbitals}o) "
+        f"-> {low.n_qubits} qubits{selection}"
     )
     for state in (low, high):
         print(
@@ -322,21 +344,30 @@ O2 = SpinGapCase(
 
 #: The metal target. [FeF6]^4- as a single-atom-ligand octahedral model keeps the geometry
 #: unambiguous while exercising the full open-shell + active-space + matrix-free path on a
-#: real 3d^6 Fe(II) centre (low-spin singlet vs high-spin quintet). Start small (Fe 3d ->
-#: (6e,5o) = 10 qubits); widen the active space once the cross-check holds.
+#: real 3d^6 Fe(II) centre (low-spin singlet vs high-spin quintet).
+#:
+#: A bare Fe-3d CAS(6,5) in STO-3G gives a *qualitatively wrong* gap (low-spin ground state,
+#: hundreds of kcal/mol) because it omits the ligand field: the 3d shell alone has no way to
+#: feel the F donors. Two changes fix the physics of the selection:
+#:   * ``def2-svp`` -- a real (double-zeta) basis, so the ligand field exists at the orbital
+#:     level instead of the toy STO-3G one; and
+#:   * ``("Fe 3d", "F 2p")`` -- the metal d shell *and* the fluorine 2p donors, so Fe-F
+#:     covalency (the actual origin of the ligand-field splitting) is inside the active space.
+#: The overlap threshold is raised to 0.5 to keep the F-2p selection tight enough to stay
+#: under the exact-reference qubit ceiling; lower it toward 0.2 for a more complete (larger)
+#: covalent space once you have headroom. The double-shell (``Fe 4d``) is the next lever but
+#: needs a reference basis that actually carries a 4d shell -- a separate step.
 FE_OCTAHEDRAL = SpinGapCase(
     name="[FeF6]4- (Fe(II) d6, illustrative geometry)",
     atoms=tuple(_octahedral("Fe", "F", bond_length=2.00)),
     charge=-4,
-    basis="sto-3g",
+    basis="def2-svp",
     low_spin=SpinState("singlet", 1),
     high_spin=SpinState("quintet", 5),
     n_active_electrons=6,
     n_active_orbitals=5,
-    # AVAS pins the active space to the Fe 3d shell -- the orbitals that carry the spin
-    # state -- instead of gambling on an index window. This is what makes the selection
-    # defensible; widen to ("Fe 3d", "Fe 4d") for the double-shell active space.
-    ao_labels=("Fe 3d",),
+    ao_labels=("Fe 3d", "F 2p"),
+    avas_threshold=0.5,
 )
 
 
