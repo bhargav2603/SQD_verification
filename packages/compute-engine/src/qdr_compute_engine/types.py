@@ -35,6 +35,7 @@ from qdr_compute_engine.typedefs.electronic import (
     IntegralSet,
     QubitHamiltonian,
 )
+from qdr_compute_engine.typedefs.embedding import EmbeddingResult
 from qdr_compute_engine.typedefs.fragments import Fragment, FragmentationResult
 from qdr_compute_engine.typedefs.geometry import (
     BOHR_IN_ANGSTROM,
@@ -52,6 +53,7 @@ __all__ = [
     "ActiveSpace",
     "Atom",
     "Circuit",
+    "EmbeddingResult",
     "EnergyEstimate",
     "ErrorBudget",
     "FermionicHamiltonian",

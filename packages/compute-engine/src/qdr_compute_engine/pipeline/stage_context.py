@@ -16,6 +16,7 @@ from typing import Any, TypeVar
 from qdr_compute_engine.types import (
     ActiveSpace,
     Circuit,
+    EmbeddingResult,
     FermionicHamiltonian,
     FragmentationResult,
     Geometry,
@@ -41,6 +42,7 @@ class StageContext:
     geometry: Geometry | None = None  # stage 1
     fragmentation: FragmentationResult | None = None  # stage 2
     integrals: IntegralSet | None = None  # stage 3
+    embedding: EmbeddingResult | None = None  # stage 3b (None on the non-embedded path)
     active_space: ActiveSpace | None = None  # stage 4
     fermionic_hamiltonian: FermionicHamiltonian | None = None  # stage 5
     qubit_hamiltonian: QubitHamiltonian | None = None  # stage 6
@@ -89,6 +91,9 @@ class StageContext:
 
     def require_integrals(self) -> IntegralSet:
         return self._require(self.integrals, "integrals", "03_integrals")
+
+    def require_embedding(self) -> EmbeddingResult:
+        return self._require(self.embedding, "embedding", "03b_embedding")
 
     def require_active_space(self) -> ActiveSpace:
         return self._require(self.active_space, "active_space", "04_active_space_selector")

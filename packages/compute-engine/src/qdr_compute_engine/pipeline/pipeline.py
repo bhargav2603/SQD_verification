@@ -21,6 +21,7 @@ from qdr_compute_engine.pipeline import (
     stage_01_geometry_pose,
     stage_02_fmo_fragmenter,
     stage_03_integrals,
+    stage_03b_embedding,
     stage_04_active_space_selector,
     stage_05_fermionic_hamiltonian,
     stage_06_qubit_mapper,
@@ -47,6 +48,7 @@ STAGES: tuple[tuple[str, StageFn], ...] = (
     (stage_01_geometry_pose.STAGE_NAME, stage_01_geometry_pose.run),
     (stage_02_fmo_fragmenter.STAGE_NAME, stage_02_fmo_fragmenter.run),
     (stage_03_integrals.STAGE_NAME, stage_03_integrals.run),
+    (stage_03b_embedding.STAGE_NAME, stage_03b_embedding.run),
     (stage_04_active_space_selector.STAGE_NAME, stage_04_active_space_selector.run),
     (stage_05_fermionic_hamiltonian.STAGE_NAME, stage_05_fermionic_hamiltonian.run),
     (stage_06_qubit_mapper.STAGE_NAME, stage_06_qubit_mapper.run),
@@ -62,6 +64,11 @@ STAGES: tuple[tuple[str, StageFn], ...] = (
 #: validation (9) operates on the assembled result, not on individual subsystem energies.
 #: ``pipeline/fmo_runner.py`` drives this once per monomer and once per dimer, so the
 #: fragment path and the supersystem path run byte-identical physics.
+#:
+#: Embedding (03b) is deliberately *not* here: the FMO many-body expansion is a different
+#: shrink mechanism (many fragments summed pairwise) from active-site projection embedding
+#: (one region in a mean-field bath). R2's single-site benchmark runs the main ``STAGES``
+#: path, so the FMO fragment path stays untouched.
 SUBSYSTEM_STAGES: tuple[tuple[str, StageFn], ...] = (
     (stage_03_integrals.STAGE_NAME, stage_03_integrals.run),
     (stage_04_active_space_selector.STAGE_NAME, stage_04_active_space_selector.run),

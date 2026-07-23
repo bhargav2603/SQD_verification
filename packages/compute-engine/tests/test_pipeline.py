@@ -22,8 +22,10 @@ from qdr_compute_engine.types import IntegralSet, ValidationReport
 from qdr_core.errors import QubitCapExceeded
 from qdr_core.ids import RunId
 
-# Stages 4 onwards: everything after integrals are available.
-POST_INTEGRAL_STAGES = STAGES[3:]
+# Stage 4 onwards: active-space selection and beyond. Stage 03b (embedding) is a
+# pass-through on the non-embedded path and sits at index 3; these tests exercise the
+# post-embedding chain, so they start at index 4.
+POST_INTEGRAL_STAGES = STAGES[4:]
 
 
 @pytest.fixture
@@ -220,12 +222,13 @@ def test_binding_energy_is_computed_when_references_are_supplied(
 # --------------------------------------------------------------------------------------
 
 
-def test_pipeline_has_nine_stages_in_order() -> None:
+def test_pipeline_has_ten_stages_in_order() -> None:
     names = [name for name, _ in STAGES]
     assert names == [
         "01_geometry_pose",
         "02_fmo_fragmenter",
         "03_integrals",
+        "03b_embedding",
         "04_active_space_selector",
         "05_fermionic_hamiltonian",
         "06_qubit_mapper",
