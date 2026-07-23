@@ -69,6 +69,26 @@ def test_avas_selects_a_nontrivial_space_for_o2() -> None:
 
 
 @pytest.mark.requires_pyscf
+def test_avas_respects_the_active_orbital_budget() -> None:
+    """A tight orbital budget must cap the selection by auto-raising the threshold, and the
+    result must record the threshold actually used (not the requested starting one)."""
+    budget = 3
+    result = avas_active_integrals(
+        _o2(spin_multiplicity=3),
+        ao_labels=["O 2p"],
+        basis="sto-3g",
+        threshold=0.2,
+        max_active_orbitals=budget,
+    )
+
+    assert result.active_space.n_active_orbitals <= budget
+    assert result.integrals.n_orbitals == result.active_space.n_active_orbitals
+    # If capping was needed the threshold was raised above the 0.2 request; either way the
+    # recorded value is the one that produced this selection.
+    assert result.threshold >= 0.2
+
+
+@pytest.mark.requires_pyscf
 def test_avas_converges_for_charged_transition_metal() -> None:
     """Regression: [FeF6]^4- stalls first-order DIIS; the second-order fallback must
     still converge it so AVAS selection does not wrongly raise 'unphysical state'."""

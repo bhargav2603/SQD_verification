@@ -58,6 +58,7 @@ def avas_active_integrals(
     ao_labels: tuple[str, ...] | list[str],
     basis: str = "sto-3g",
     threshold: float = DEFAULT_AVAS_THRESHOLD,
+    max_active_orbitals: int | None = None,
     verbose: int = 0,
 ) -> AvasResult:
     """Select an active space by AVAS and return integrals restricted to it.
@@ -67,6 +68,14 @@ def avas_active_integrals(
     ROHF -- the same single-coefficient-set reference the rest of the spin-gap path relies
     on. The returned active space is guaranteed to span the requested orbitals; how many it
     picks (``ncas``) is AVAS's decision, recorded in the result.
+
+    ``threshold`` is the AVAS overlap cutoff (its count of active orbitals is non-increasing
+    in it). ``max_active_orbitals`` optionally caps the selection to a qubit budget: a rich
+    target like ``("Fe 3d", "F 2p")`` can pull in every ligand p shell and overrun what an
+    exact reference can hold, so when the initial threshold selects too many, this raises the
+    threshold on a fine grid and keeps the *largest* space that still fits -- the most
+    covalency the budget allows, chosen automatically rather than by hand-tuning. The
+    threshold actually used is recorded in the result.
     """
     if not ao_labels:
         raise ValidationError(
@@ -96,9 +105,30 @@ def avas_active_integrals(
             e_hf=e_hf,
         )
 
+    labels = list(ao_labels)
+    used_threshold = threshold
     n_active_orbitals, n_active_electrons, mo_coeff = avas.avas(
-        mean_field, list(ao_labels), threshold=threshold
+        mean_field, labels, threshold=used_threshold
     )
+    if max_active_orbitals is not None and int(n_active_orbitals) > max_active_orbitals:
+        # Raise the threshold on a fine grid and take the smallest one whose selection fits:
+        # since the AVAS orbital count only ever shrinks as the threshold rises, the first
+        # fit is the largest active space within the budget. AVAS is cheap on a fixed SCF,
+        # so this re-projection loop never repeats the (expensive) mean-field solve.
+        for candidate in np.round(np.arange(threshold + 0.05, 1.0, 0.05), 3):
+            used_threshold = float(candidate)
+            n_active_orbitals, n_active_electrons, mo_coeff = avas.avas(
+                mean_field, labels, threshold=used_threshold
+            )
+            if int(n_active_orbitals) <= max_active_orbitals:
+                break
+        if int(n_active_orbitals) > max_active_orbitals:
+            raise ValidationError(
+                "AVAS could not fit the requested orbitals within the active-space budget "
+                "even at a near-unit threshold; trim ao_labels or raise the budget",
+                max_active_orbitals=max_active_orbitals,
+                n_active_orbitals=int(n_active_orbitals),
+            )
     # AVAS may report active electrons as a total or an (alpha, beta) split; the active
     # space carries the total (the spin sector is chosen later from the spin multiplicity).
     n_active_electrons = int(np.sum(n_active_electrons))
@@ -119,7 +149,7 @@ def avas_active_integrals(
         integrals=restrict_integrals(full, active_space),
         active_space=active_space,
         ao_labels=tuple(ao_labels),
-        threshold=threshold,
+        threshold=used_threshold,
     )
 
 
