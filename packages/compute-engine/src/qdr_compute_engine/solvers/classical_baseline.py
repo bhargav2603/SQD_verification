@@ -112,7 +112,14 @@ def solve_fci(integrals: IntegralSet, *, spin_multiplicity: int = 1) -> Classica
     target_s_squared = spin * (spin + 1.0)
 
     solver = fci.direct_spin1.FCI()
-    solver.conv_tol = 1e-10
+    # A strongly correlated low-spin state (the d6 metal singlet) converges slowly: the
+    # default Davidson budget (max_cycle=50, a small Krylov space) stops ~1e-3 Ha short of the
+    # true minimum, which the exact matrix-free QDR solve reaches -- and the cross-check then
+    # fails on that gap. Tighten the tolerance and widen the iteration/subspace budget so the
+    # reference actually reaches the minimum rather than merely a nearby stationary point.
+    solver.conv_tol = 1e-11
+    solver.max_cycle = 400
+    solver.max_space = 40
     fci.addons.fix_spin_(solver, shift=_SPIN_PENALTY_SHIFT, ss=target_s_squared)
     n_determinants = comb(n_orbitals, n_alpha) * comb(n_orbitals, n_beta)
     solver.nroots = max(1, min(_SPIN_ROOT_PROBE, n_determinants))

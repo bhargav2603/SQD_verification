@@ -247,7 +247,19 @@ def _lowest_eigenvalue_in_sector(
     if sector.size <= _DENSE_DIMENSION_CEILING:
         return float(np.linalg.eigvalsh(_dense_from_linear_operator(block))[0])
 
-    eigenvalues = eigsh(block, k=1, which="SA", return_eigenvectors=False)
+    # Drive eigsh to full precision: a wider Krylov space and generous iteration budget so a
+    # near-degenerate low-spin ground state (the d6 metal singlet) is resolved to the true
+    # minimum, not a Ritz value a few 1e-4 Ha above it -- otherwise the CASCI cross-check,
+    # which does reach the minimum, disagrees and the runner refuses to report the gap.
+    eigenvalues = eigsh(
+        block,
+        k=1,
+        which="SA",
+        return_eigenvectors=False,
+        ncv=min(sector.size, 40),
+        maxiter=sector.size * 20,
+        tol=0,
+    )
     return float(eigenvalues[0])
 
 
