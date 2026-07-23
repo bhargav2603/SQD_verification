@@ -46,7 +46,7 @@ from qdr_compute_engine.ansatze.uccsd import build_uccsd_ansatz, initial_paramet
 from qdr_compute_engine.benchmarks.systems import ActiveSpaceSpec, BenchmarkSystem
 from qdr_compute_engine.drivers.statevector.statevector_driver import (
     StatevectorDriver,
-    exact_ground_state_energy,
+    exact_ground_state_energy_at_particle_number,
 )
 from qdr_compute_engine.hamiltonian.fermionic_builder import build_fermionic_hamiltonian
 from qdr_compute_engine.integrals.pyscf_integrals import compute_integrals
@@ -97,6 +97,10 @@ class BenchmarkRecord:
     seconds_reference: float
 
     warnings: list[str] = field(default_factory=list)
+
+    #: VQE energy at each optimiser evaluation, for the convergence figure. Empty when the
+    #: driver reports no history (e.g. a zero-parameter ansatz).
+    energy_history: list[float] = field(default_factory=list)
 
     @property
     def within_chemical_accuracy(self) -> bool:
@@ -161,7 +165,10 @@ def run_case(
     # Reference 2: exact in the SAME active space. Computed two ways where possible --
     # PySCF's FCI on the restricted integrals, and direct diagonalisation of the qubit
     # Hamiltonian. They must agree; a disagreement means the Hamiltonian handed to the
-    # quantum path is not the one the classical reference solved.
+    # quantum path is not the one the classical reference solved. The diagonalisation is
+    # restricted to the active electron count: an active-space effective Hamiltonian folds
+    # the frozen core's attraction into the one-body term, so its unconstrained ground
+    # state can sit in a different sector and would not be comparable to CASCI.
     started = time.perf_counter()
     e_casci: float | None = None
     try:
@@ -170,7 +177,9 @@ def run_case(
         warnings.append(f"CASCI reference unavailable: {exc}")
 
     if qubit_hamiltonian.n_qubits <= MAX_EXACT_REFERENCE_QUBITS:
-        e_qubit_exact = exact_ground_state_energy(qubit_hamiltonian)
+        e_qubit_exact = exact_ground_state_energy_at_particle_number(
+            qubit_hamiltonian, active_space.n_active_electrons
+        )
         if e_casci is None:
             e_casci = e_qubit_exact
         elif abs(e_qubit_exact - e_casci) > 1e-7:
@@ -237,6 +246,7 @@ def run_case(
         seconds_vqe=seconds_vqe,
         seconds_reference=seconds_reference,
         warnings=warnings,
+        energy_history=[float(value) for value in result.metadata.get("history", [])],
     )
 
 

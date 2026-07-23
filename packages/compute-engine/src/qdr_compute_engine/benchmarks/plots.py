@@ -2,22 +2,31 @@
 
 The JSON and Markdown that :mod:`qdr_compute_engine.benchmarks.report` writes are the
 artifact; these figures are a *view* of the same records, for a write-up or a slide.
-Three figures, each answering a question a reviewer actually asks:
+Each answers a question a reviewer actually asks:
 
 ``dissociation``
-    E vs bond length for the H2 scan, with HF, VQE and FCI overlaid. The one figure that
-    shows the quantum path tracking the exact curve into the stretched-bond region where
-    restricted Hartree-Fock breaks -- i.e. that it reproduces the *physics*, not just the
-    reference near equilibrium.
+    E vs bond length for the H2 scan, with HF, VQE and FCI overlaid. Shows the quantum
+    path tracking the exact curve into the stretched-bond region where restricted
+    Hartree-Fock breaks -- i.e. that it reproduces the *physics*, not just the reference
+    near equilibrium.
+``dissociation_error``
+    The same scan as |E_method - E_FCI| in kcal/mol on a log axis, against the
+    chemical-accuracy line -- the canonical VQE-paper panel, turning "VQE sits on FCI"
+    into a quantitative claim.
 ``error_decomposition``
     Per case, the quantum-path error and the active-space error side by side, in
-    kcal/mol, against the chemical-accuracy line. This is the honest-error-budget figure:
-    it separates "error the quantum algorithm introduced" from "error I chose by
-    truncating the orbital space", so neither can hide inside a flattering total.
+    kcal/mol, against the chemical-accuracy line. The honest-error-budget figure: it
+    separates "error the quantum algorithm introduced" from "error I chose by truncating
+    the orbital space", so neither can hide inside a flattering total.
 ``active_space_convergence``
     Total error vs active-space size for any system swept over more than one active space
     (H2O here). The systematic-improvability story: the error shrinks as orbitals are
     added back.
+``convergence``
+    VQE residual to the exact active-space energy vs optimiser evaluation -- the "the
+    optimiser actually works" figure. Needs the optimiser history the runner now records.
+``resources``
+    Gate and CNOT counts per case, ordered by qubit count: what the result cost.
 
 matplotlib is imported lazily and only inside the functions that draw, with the headless
 ``Agg`` backend forced before ``pyplot`` loads. Nothing in the engine imports this
@@ -217,11 +226,143 @@ def active_space_convergence_figure(records: list[BenchmarkRecord]) -> "Figure |
     return fig
 
 
+def dissociation_error_figure(records: list[BenchmarkRecord]) -> "Figure | None":
+    """|E_method - E_FCI| in kcal/mol vs bond length, on a log axis. ``None`` if no scan.
+
+    The canonical companion to the dissociation curve: it turns "VQE sits on FCI" into a
+    quantitative claim against the chemical-accuracy line, and shows Hartree-Fock climbing
+    away from it in the stretched-bond region where a single determinant fails.
+    """
+    scan = sorted(
+        (r for r in records if _is_scan_record(r) and r.e_fci_full is not None),
+        key=lambda r: float(r.system.split("@")[1]),
+    )
+    if not scan:
+        return None
+
+    plt = _configure_matplotlib()
+
+    def error_kcal(value: float, reference: float) -> float:
+        return max(abs(hartree_to_kcal(value - reference) or 0.0), _LOG_FLOOR_KCAL)
+
+    distances = [float(r.system.split("@")[1]) for r in scan]
+    hf_error = [error_kcal(r.e_hf, r.e_fci_full) for r in scan if r.e_fci_full is not None]
+    vqe_error = [error_kcal(r.e_vqe, r.e_fci_full) for r in scan if r.e_fci_full is not None]
+
+    fig, ax = plt.subplots(figsize=(6.0, 4.5))
+    ax.plot(distances, hf_error, "s--", color="#888888", label="Hartree-Fock", markersize=4)
+    ax.plot(distances, vqe_error, "o-", color="#d62728", label="VQE / UCCSD", markersize=5)
+    ax.axhline(
+        _CHEMICAL_ACCURACY_KCAL,
+        color="green",
+        linestyle="--",
+        linewidth=1,
+        label=f"chemical accuracy ({_CHEMICAL_ACCURACY_KCAL:.2f} kcal/mol)",
+    )
+    ax.set_yscale("log")
+    ax.set_xlabel("H-H bond length (Angstrom)")
+    ax.set_ylabel("|E - E_FCI| (kcal/mol)")
+    ax.set_title("Error vs geometry: VQE holds chemical accuracy where HF fails")
+    ax.legend(frameon=False)
+    ax.grid(True, which="both", alpha=0.25)
+    fig.tight_layout()
+    return fig
+
+
+def convergence_figure(records: list[BenchmarkRecord]) -> "Figure | None":
+    """VQE residual to the exact active-space energy vs optimiser evaluation, log scale.
+
+    One line per standard case that carries an optimiser history. ``None`` if none do --
+    which is the case for results produced before the history was recorded, so the figure
+    simply does not appear rather than erroring.
+    """
+    cases = [
+        r for r in records if not _is_scan_record(r) and r.energy_history and r.e_casci is not None
+    ]
+    if not cases:
+        return None
+
+    plt = _configure_matplotlib()
+
+    fig, ax = plt.subplots(figsize=(6.0, 4.5))
+    for record in cases:
+        reference = record.e_casci
+        if reference is None:
+            continue
+        residual = [
+            max(abs(hartree_to_kcal(energy - reference) or 0.0), _LOG_FLOOR_KCAL)
+            for energy in record.energy_history
+        ]
+        ax.plot(
+            range(1, len(residual) + 1),
+            residual,
+            "-",
+            label=f"{record.system} {record.active_space_label}",
+        )
+
+    ax.axhline(
+        _CHEMICAL_ACCURACY_KCAL,
+        color="green",
+        linestyle="--",
+        linewidth=1,
+        label=f"chemical accuracy ({_CHEMICAL_ACCURACY_KCAL:.2f} kcal/mol)",
+    )
+    ax.set_yscale("log")
+    ax.set_xlabel("optimiser energy evaluation")
+    ax.set_ylabel("|E - E_CASCI| (kcal/mol)")
+    ax.set_title("VQE convergence to the exact active-space energy")
+    ax.legend(frameon=False, fontsize=8)
+    ax.grid(True, which="both", alpha=0.25)
+    fig.tight_layout()
+    return fig
+
+
+def resource_figure(records: list[BenchmarkRecord]) -> "Figure | None":
+    """Circuit cost -- gates and CNOTs -- per standard case, ordered by qubit count.
+
+    ``None`` if there are no standard cases. Bars are log-scaled because the count grows
+    fast with the active space, which is the whole point of showing it.
+    """
+    import numpy as np
+
+    cases = sorted(
+        (r for r in records if not _is_scan_record(r)), key=lambda r: (r.n_qubits, r.system)
+    )
+    if not cases:
+        return None
+
+    plt = _configure_matplotlib()
+
+    labels = [f"{r.system}\n{r.active_space_label}\n{r.n_qubits}q" for r in cases]
+    gates = [r.n_gates for r in cases]
+    cnots = [r.n_cnot for r in cases]
+
+    x = np.arange(len(cases))
+    width = 0.38
+
+    fig, ax = plt.subplots(figsize=(max(6.0, 1.6 * len(cases)), 4.5))
+    ax.bar(x - width / 2, gates, width, color="#1f77b4", label="gates")
+    ax.bar(x + width / 2, cnots, width, color="#d62728", label="CNOTs")
+
+    ax.set_yscale("log")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("count")
+    ax.set_title("Circuit cost by active space (qubit count increases left to right)")
+    ax.legend(frameon=False)
+    ax.grid(True, axis="y", alpha=0.25)
+    fig.tight_layout()
+    return fig
+
+
 #: The figures, keyed by the filename suffix they are written under.
 _FIGURES = {
     "dissociation": dissociation_figure,
+    "dissociation_error": dissociation_error_figure,
     "error_decomposition": error_decomposition_figure,
     "active_space_convergence": active_space_convergence_figure,
+    "convergence": convergence_figure,
+    "resources": resource_figure,
 }
 
 

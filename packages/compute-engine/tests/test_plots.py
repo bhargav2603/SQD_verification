@@ -15,9 +15,12 @@ pytest.importorskip("matplotlib")
 
 from qdr_compute_engine.benchmarks.plots import (
     active_space_convergence_figure,
+    convergence_figure,
+    dissociation_error_figure,
     dissociation_figure,
     error_decomposition_figure,
     load_records,
+    resource_figure,
     write_figures,
 )
 from qdr_compute_engine.benchmarks.report import write_results
@@ -33,6 +36,7 @@ def _record(
     e_vqe: float = -75.01,
     e_casci: float | None = -75.011,
     e_fci_full: float | None = -75.02,
+    energy_history: tuple[float, ...] = (),
 ) -> BenchmarkRecord:
     """A fully-populated record; the error terms are derived to stay self-consistent."""
     error_quantum_path = None if e_casci is None else e_vqe - e_casci
@@ -63,6 +67,7 @@ def _record(
         seconds_vqe=0.5,
         seconds_reference=0.2,
         warnings=[],
+        energy_history=list(energy_history),
     )
 
 
@@ -74,11 +79,28 @@ def _scan_records() -> list[BenchmarkRecord]:
 
 
 def _standard_records() -> list[BenchmarkRecord]:
+    # A short decreasing history that lands just above e_casci, so the convergence figure
+    # has a residual curve to draw.
+    history = (-74.98, -75.005, -75.0105, -75.011)
     return [
-        _record("LiH", "CAS(2,5)", n_qubits=10),
-        _record("H2O", "CAS(4,4)", n_qubits=8, e_fci_full=-75.02),
-        _record("H2O", "CAS(6,5)", n_qubits=10, e_casci=-75.017, e_fci_full=-75.02),
-        _record("H2O", "CAS(8,6)", n_qubits=12, e_casci=-75.0198, e_fci_full=-75.02),
+        _record("LiH", "CAS(2,5)", n_qubits=10, energy_history=history),
+        _record("H2O", "CAS(4,4)", n_qubits=8, e_fci_full=-75.02, energy_history=history),
+        _record(
+            "H2O",
+            "CAS(6,5)",
+            n_qubits=10,
+            e_casci=-75.017,
+            e_fci_full=-75.02,
+            energy_history=history,
+        ),
+        _record(
+            "H2O",
+            "CAS(8,6)",
+            n_qubits=12,
+            e_casci=-75.0198,
+            e_fci_full=-75.02,
+            energy_history=history,
+        ),
     ]
 
 
@@ -102,6 +124,24 @@ def test_convergence_figure_needs_a_swept_system() -> None:
     assert active_space_convergence_figure([_record("LiH", "CAS(2,5)")]) is None
 
 
+def test_dissociation_error_figure_needs_a_scan_with_fci() -> None:
+    assert dissociation_error_figure(_scan_records()) is not None
+    assert dissociation_error_figure(_standard_records()) is None
+
+
+def test_convergence_figure_needs_an_optimiser_history() -> None:
+    assert convergence_figure(_standard_records()) is not None
+    # Records without a recorded history (e.g. produced before it was plumbed through).
+    no_history = [_record("LiH", "CAS(2,5)")]
+    assert convergence_figure(no_history) is None
+
+
+def test_resource_figure_needs_standard_cases() -> None:
+    assert resource_figure(_standard_records()) is not None
+    # A scan alone has no standard cases to chart.
+    assert resource_figure(_scan_records()) is None
+
+
 def test_write_figures_emits_a_png_per_available_figure(tmp_path: Path) -> None:
     records = [*_scan_records(), *_standard_records()]
     paths = write_figures(records, tmp_path, stem="run")
@@ -109,8 +149,11 @@ def test_write_figures_emits_a_png_per_available_figure(tmp_path: Path) -> None:
     names = {p.name for p in paths}
     assert names == {
         "run_dissociation.png",
+        "run_dissociation_error.png",
         "run_error_decomposition.png",
         "run_active_space_convergence.png",
+        "run_convergence.png",
+        "run_resources.png",
     }
     for path in paths:
         assert path.exists()
@@ -118,9 +161,9 @@ def test_write_figures_emits_a_png_per_available_figure(tmp_path: Path) -> None:
 
 
 def test_write_figures_skips_figures_without_data(tmp_path: Path) -> None:
-    # Only a scan: the two error figures have nothing to draw and must not be written.
+    # Only a scan: the standard-case figures have nothing to draw and must not be written.
     paths = write_figures(_scan_records(), tmp_path, stem="run")
-    assert {p.name for p in paths} == {"run_dissociation.png"}
+    assert {p.name for p in paths} == {"run_dissociation.png", "run_dissociation_error.png"}
 
 
 def test_load_records_round_trips_a_saved_run(tmp_path: Path) -> None:

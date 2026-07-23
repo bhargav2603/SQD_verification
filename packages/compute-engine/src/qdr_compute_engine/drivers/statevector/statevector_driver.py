@@ -243,6 +243,12 @@ def exact_ground_state_energy(hamiltonian: QubitHamiltonian) -> float:
     This is the variational floor: no ansatz can beat it. Used by the validator to
     quantify how much energy the ansatz leaves on the table, and by tests as an
     ansatz-independent reference.
+
+    This is over *all* particle-number sectors. For a full-space molecular Hamiltonian
+    the neutral count is the global minimum, so this equals the FCI energy; for an
+    active-space *effective* Hamiltonian it is not, and
+    :func:`exact_ground_state_energy_at_particle_number` is the reference that matches
+    CASCI.
     """
     from scipy.sparse.linalg import eigsh
 
@@ -254,4 +260,38 @@ def exact_ground_state_energy(hamiltonian: QubitHamiltonian) -> float:
         return float(np.linalg.eigvalsh(matrix.toarray())[0])
 
     eigenvalues = eigsh(matrix, k=1, which="SA", return_eigenvectors=False)
+    return float(eigenvalues[0])
+
+
+def exact_ground_state_energy_at_particle_number(
+    hamiltonian: QubitHamiltonian, n_electrons: int
+) -> float:
+    """Lowest eigenvalue within the fixed particle-number sector.
+
+    Under Jordan-Wigner the electron number of a computational basis state is its Hamming
+    weight, so the ``n_electrons``-electron sector is spanned by the basis states with
+    exactly that many set bits. Restricting to it before diagonalising is what makes this
+    comparable to a CASCI reference: an active-space effective Hamiltonian folds the
+    frozen core's attraction into the one-body term, which over-binds the active orbitals,
+    so its *unconstrained* ground state can lie in a different sector entirely. Comparing
+    that unconstrained value against CASCI is apples-to-oranges; this is the like-for-like
+    reference.
+    """
+    from scipy.sparse.linalg import eigsh
+
+    matrix = hamiltonian_matrix(hamiltonian).tocsr()
+    dimension = matrix.shape[0]
+    sector = [index for index in range(dimension) if bin(index).count("1") == n_electrons]
+    if not sector:
+        raise ValidationError(
+            f"no basis state holds {n_electrons} electrons in {hamiltonian.n_qubits} spin orbitals",
+            n_electrons=n_electrons,
+            n_qubits=hamiltonian.n_qubits,
+        )
+
+    block = matrix[sector][:, sector]
+    if block.shape[0] <= 64:
+        return float(np.linalg.eigvalsh(block.toarray())[0])
+
+    eigenvalues = eigsh(block, k=1, which="SA", return_eigenvectors=False)
     return float(eigenvalues[0])

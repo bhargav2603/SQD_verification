@@ -102,11 +102,21 @@ def restrict_integrals(integrals: IntegralSet, active_space: ActiveSpace) -> Int
     The frozen-core contribution is folded into ``e_nuc`` as a constant energy shift,
     computed from the standard closed-shell core expression
 
-        E_core = sum_i 2*h_ii + sum_ij (2*<ij|ij> - <ij|ji>)
+        E_core = sum_i 2*h_ii + sum_ij (2*J_ij - K_ij)
 
-    over frozen orbitals i, j, plus the core-active mean-field term added to the
-    one-body operator. Dropping either term leaves the total energy wrong by a constant,
-    which is invisible in a variational optimisation but corrupts every energy difference.
+    over frozen orbitals i, j (``J`` Coulomb, ``K`` exchange), plus the core-active mean
+    field added to the one-body operator. Dropping either term leaves the total energy
+    wrong by a constant, invisible in a variational optimisation but corrupting every
+    energy difference.
+
+    Index convention (critical): this engine stores ``h2`` such that
+    ``h2[a, b, c, d] = (ad | bc)`` in chemist notation -- the transpose fixed once in
+    ``chemist_to_physicist``. So the Coulomb integral ``(ii|jj)`` is ``h2[i, j, j, i]``
+    and the exchange ``(ij|ji)`` is ``h2[i, j, i, j]``; the mean-field Coulomb ``(pq|ii)``
+    is ``h2[p, i, i, q]`` and its exchange ``(pi|iq)`` is ``h2[p, i, q, i]``. Writing the
+    reduction with the textbook ``<ij|ij>`` convention instead silently swaps J and K,
+    which the H2 gate cannot catch because H2 freezes no core (verified against
+    OpenFermion's ``freeze_orbitals`` in ``tests/test_frozen_core.py``).
     """
     core = list(range(active_space.n_frozen_core_orbitals))
     active = list(active_space.orbital_indices)
@@ -123,12 +133,12 @@ def restrict_integrals(integrals: IntegralSet, active_space: ActiveSpace) -> Int
         )
 
     h1 = integrals.h1
-    h2 = integrals.h2  # physicist notation <pq|rs>
+    h2 = integrals.h2  # h2[a, b, c, d] = (ad | bc), chemist
 
     e_core = 2.0 * sum(h1[i, i] for i in core)
     for i in core:
         for j in core:
-            e_core += 2.0 * h2[i, j, i, j] - h2[i, j, j, i]
+            e_core += 2.0 * h2[i, j, j, i] - h2[i, j, i, j]  # 2*J_ij - K_ij
 
     # Mean field of the frozen core, seen by the active electrons.
     h1_eff = h1.copy()
@@ -136,7 +146,7 @@ def restrict_integrals(integrals: IntegralSet, active_space: ActiveSpace) -> Int
         for q in range(integrals.n_orbitals):
             correction = 0.0
             for i in core:
-                correction += 2.0 * h2[i, p, i, q] - h2[i, p, q, i]
+                correction += 2.0 * h2[p, i, i, q] - h2[p, i, q, i]  # 2*(pq|ii) - (pi|iq)
             h1_eff[p, q] += correction
 
     return IntegralSet(
