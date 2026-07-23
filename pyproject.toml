@@ -31,9 +31,11 @@ dev = [
 # A dependency group belongs to the workspace root itself, so `uv sync --group chem`
 # is unambiguous on every platform.
 #
-# The marker is kept: PySCF publishes manylinux and macOS wheels only, and the Windows
-# sdist requires a CMake toolchain and fails to build. Execution happens on Linux.
-chem = ["pyscf>=2.6; sys_platform != 'win32'"]
+# The PySCF marker is kept: PySCF publishes manylinux and macOS wheels only, and the
+# Windows sdist requires a CMake toolchain and fails to build. Execution happens on Linux.
+# matplotlib (the validation figures) carries no marker -- it has wheels everywhere, so
+# the plot code and its tests run on the Windows dev box too.
+chem = ["pyscf>=2.6; sys_platform != 'win32'", "matplotlib>=3.8"]
 
 [tool.pytest.ini_options]
 testpaths = ["packages/qdr-core/tests", "packages/compute-engine/tests"]

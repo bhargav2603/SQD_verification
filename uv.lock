@@ -20,7 +20,10 @@ members = [
 ]
 
 [manifest.dependency-groups]
-chem = [{ name = "pyscf", marker = "sys_platform != 'win32'", specifier = ">=2.6" }]
+chem = [
+    { name = "matplotlib", specifier = ">=3.8" },
+    { name = "pyscf", marker = "sys_platform != 'win32'", specifier = ">=2.6" },
+]
 dev = [
     { name = "mypy", specifier = ">=1.11" },
     { name = "pytest", specifier = ">=8.0" },
@@ -1037,11 +1040,13 @@ dependencies = [
 
 [package.optional-dependencies]
 chem = [
+    { name = "matplotlib" },
     { name = "pyscf", marker = "sys_platform != 'win32'" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "matplotlib", marker = "extra == 'chem'", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openfermion", specifier = ">=1.8" },
     { name = "pyscf", marker = "sys_platform != 'win32' and extra == 'chem'", specifier = ">=2.6" },

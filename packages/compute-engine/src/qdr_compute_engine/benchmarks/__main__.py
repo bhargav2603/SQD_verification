@@ -70,6 +70,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="stop at the first failing case instead of recording it and continuing",
     )
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="skip the PNG figures (JSON and Markdown are always written)",
+    )
     return parser.parse_args(argv)
 
 
@@ -140,6 +145,20 @@ def main(argv: list[str] | None = None) -> int:
 
     json_path, markdown_path = write_results(records, args.out, stem=args.stem)
     print(f"\nWrote {json_path}\nWrote {markdown_path}")
+
+    if not args.no_plots:
+        try:
+            from qdr_compute_engine.benchmarks.plots import write_figures
+
+            for figure_path in write_figures(records, args.out, stem=args.stem):
+                print(f"Wrote {figure_path}")
+        except ImportError:
+            print(
+                "NOTE: matplotlib is not installed, so no figures were drawn. "
+                "Install it (`uv sync --group chem`) or plot later from "
+                f"{json_path} with qdr_compute_engine.benchmarks.plots.load_records.",
+                file=sys.stderr,
+            )
 
     n_warned = sum(1 for r in records if r.warnings)
     print(f"\n{len(records)} case(s) completed, {n_warned} with warnings, {len(failures)} failed.")

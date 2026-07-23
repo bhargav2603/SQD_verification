@@ -21,12 +21,13 @@ from qdr_compute_engine.benchmarks.report import (
     warnings_section,
     write_results,
 )
-from qdr_compute_engine.benchmarks.runner import BenchmarkRecord
+from qdr_compute_engine.benchmarks.runner import BenchmarkRecord, run_case
 from qdr_compute_engine.geometry.pose_builder import (
     count_electrons,
     require_closed_shell,
     validate_geometry,
 )
+from qdr_core.limits import CHEMICAL_ACCURACY_HA
 
 # ---------------------------------------------------------------------------------
 # System definitions
@@ -247,3 +248,75 @@ def test_cli_exits_cleanly_without_pyscf(monkeypatch, capsys) -> None:
 
     assert exit_code == 2
     assert "PySCF is not installed" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------------
+# The correctness gate (needs PySCF -> runs in Linux CI, skipped on Windows)
+#
+# Everything above tests plumbing with a fabricated `_record()` whose energies are
+# made up. These run the real pipeline on the standard systems and fail loudly if a
+# computed energy is wrong -- turning "the engine reproduces FCI" from a report a
+# human reads into a test that turns CI red. This is rung 1's actual gate.
+# ---------------------------------------------------------------------------------
+
+#: One small active space per standard system. Small so the qubit-Hamiltonian cross-
+#: check runs and VQE stays fast; `compute_full_fci=False` because the claim here is
+#: "the quantum path reproduces the exact answer of the SAME active space" (E_VQE vs
+#: E_CASCI), which needs no full-space FCI.
+_GATE_CASES = (
+    (systems.LIH, systems.LIH.active_spaces[0]),  # CAS(2,5), 10 qubits, 2 electrons
+    (systems.BEH2, systems.BEH2.active_spaces[0]),  # CAS(4,6), 12 qubits
+    (systems.H2O, systems.H2O.active_spaces[0]),  # CAS(4,4), 8 qubits
+)
+
+
+@pytest.mark.requires_pyscf
+@pytest.mark.parametrize(
+    ("system", "spec"),
+    _GATE_CASES,
+    ids=[f"{system.name}/{spec.label}" for system, spec in _GATE_CASES],
+)
+def test_standard_systems_pass_the_correctness_gate(system, spec) -> None:
+    """THE GATE for the standard set: the quantum path reproduces the exact reference.
+
+    ``run_case`` appends a warning for every failure it can detect -- the CASCI-from-
+    integrals vs qubit-Hamiltonian disagreement (the "believable but wrong number"
+    guard), a variational-principle violation, and non-convergence. An empty warning
+    list is therefore the assertion that every internal cross-check passed, so the
+    number is trustworthy rather than merely plausible.
+
+    Note deliberately NOT asserted: the magnitude of ``error_quantum_path``. For a
+    system with more than two electrons UCCSD is not exact, so a non-zero E_VQE - E_CASCI
+    is legitimate ansatz physics, not a bug -- the same reason the runner keeps the
+    truncation term separate. The bug-indicators are the three checks below.
+    """
+    record = run_case(system, spec, compute_full_fci=False)
+
+    assert record.warnings == [], f"{system.name}/{spec.label}: {record.warnings}"
+    assert record.converged, f"{system.name}/{spec.label} did not converge"
+    # Variational principle: no ansatz can sit below the exact ground state of its own
+    # active space. A negative value here is an implementation bug, not a good result.
+    assert record.error_quantum_path is not None
+    assert record.error_quantum_path >= -1e-9, (
+        f"{system.name}/{spec.label}: E_VQE lies {record.error_quantum_path:.2e} Ha "
+        "below CASCI, violating the variational principle"
+    )
+
+
+@pytest.mark.requires_pyscf
+def test_two_electron_active_space_reproduces_casci() -> None:
+    """A known-answer check where UCCSD is exact.
+
+    LiH CAS(2,5) has two active electrons, so singles + doubles span the whole
+    determinant space and UCCSD can represent the exact state. The only error left in
+    ``error_quantum_path`` is the optimiser's (and any Trotter residue), which must fall
+    below chemical accuracy. A larger gap means the ansatz, the mapping, or the optimiser
+    regressed -- and unlike the parametrised test above, here we know the true answer.
+    """
+    record = run_case(systems.LIH, systems.LIH.active_spaces[0], compute_full_fci=False)
+
+    assert record.error_quantum_path is not None
+    assert abs(record.error_quantum_path) < CHEMICAL_ACCURACY_HA, (
+        "UCCSD is exact for a two-electron active space, so E_VQE should reproduce "
+        f"E_CASCI; the gap {record.error_quantum_path:.3e} Ha exceeds chemical accuracy"
+    )

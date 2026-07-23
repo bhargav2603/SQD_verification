@@ -15,7 +15,7 @@ dependencies = [
 # extra *and* marking it off-win32 lets `uv sync` succeed on a Windows dev box; the
 # PySCF-dependent tests then auto-skip locally and run for real on Linux CI.
 [project.optional-dependencies]
-chem = ["pyscf>=2.6; sys_platform != 'win32'"]
+chem = ["pyscf>=2.6; sys_platform != 'win32'", "matplotlib>=3.8"]
 
 [tool.uv.sources]
 qdr-core = { workspace = true }
