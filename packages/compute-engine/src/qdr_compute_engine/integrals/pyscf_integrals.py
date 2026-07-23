@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from qdr_compute_engine.geometry.pose_builder import require_closed_shell, to_pyscf_atom_spec
+from qdr_compute_engine.geometry.pose_builder import to_pyscf_atom_spec
 from qdr_compute_engine.types import Geometry, IntegralSet
 from qdr_core.errors import ValidationError
 
@@ -70,13 +70,16 @@ def compute_integrals(
     basis: str = DEFAULT_BASIS,
     verbose: int = 0,
 ) -> IntegralSet:
-    """Run RHF and return MO-basis integrals for ``geometry``."""
+    """Run the reference SCF and return MO-basis integrals for ``geometry``.
+
+    Closed-shell geometries use RHF, exactly as before. Open-shell geometries
+    (``spin_multiplicity > 1``) use **ROHF**, which -- unlike UHF -- keeps a *single* set of
+    MO coefficients, so the resulting integrals are spin-free and feed the same
+    ``(n_alpha, n_beta)`` FCI/CASCI machinery a spin gap needs. UHF is deliberately not used
+    here: its two coefficient sets would make the MO-basis two-electron integrals ambiguous.
+    """
     pyscf = _require_pyscf()
     from pyscf import ao2mo, scf
-
-    # `scf.RHF(mol)` silently returns an ROHF object when `mol.spin != 0` rather than
-    # raising, so without this the wrong reference would flow downstream unremarked.
-    require_closed_shell(geometry)
 
     molecule = pyscf.gto.Mole()
     molecule.atom = to_pyscf_atom_spec(geometry)
@@ -87,12 +90,14 @@ def compute_integrals(
     molecule.verbose = verbose
     molecule.build()
 
-    mean_field = scf.RHF(molecule)
+    is_closed_shell = molecule.spin == 0
+    mean_field = scf.RHF(molecule) if is_closed_shell else scf.ROHF(molecule)
     e_hf = float(mean_field.kernel())
     if not mean_field.converged:
         raise ValidationError(
-            "RHF did not converge; the geometry or charge/spin state is likely unphysical",
+            "SCF did not converge; the geometry or charge/spin state is likely unphysical",
             e_hf=e_hf,
+            reference="RHF" if is_closed_shell else "ROHF",
         )
 
     mo_coefficients = mean_field.mo_coeff
