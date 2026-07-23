@@ -355,23 +355,24 @@ O2 = SpinGapCase(
 #:     level instead of the toy STO-3G one; and
 #:   * ``("Fe 3d", "F 2p")`` -- the metal d shell *and* the fluorine 2p donors, so Fe-F
 #:     covalency (the actual origin of the ligand-field splitting) is inside the active space.
-#: The full Fe-3d + F-2p space is larger than an exact reference can hold, so the runner hands
-#: AVAS the exact-reference qubit ceiling as an orbital budget: it starts from this (low)
-#: threshold and auto-raises it just enough to fit, keeping the *largest* covalent space the
-#: budget allows. Starting low (0.2) means "pack as much covalency as fits" rather than
-#: hand-guessing a threshold. The double-shell (``Fe 4d``) is the next lever but needs a
-#: reference basis that actually carries a 4d shell -- a separate step.
+#: Active space = the Fe 3d shell (CAS(6,5) = 10 qubits), which fits the exact CASCI/QDR
+#: cross-check comfortably. Note what does *not* work here: adding ``"F 2p"`` for Fe-F
+#: covalency pulls in all six fluorines' 2p shells (>20 orbitals), and no AVAS threshold can
+#: shrink it -- the non-bonding F lone pairs are essentially pure atomic 2p, so their overlap
+#: with the target is ~1 and they are always selected. Covalency is therefore irreducibly too
+#: large for an exact reference; it belongs in the WF-in-DFT embedding path (dynamic
+#: correlation from the environment), not a bigger CAS. This case keeps the engine honest end
+#: to end; the *physics* of the Fe gap is the embedding story, not this minimal CAS.
 FE_OCTAHEDRAL = SpinGapCase(
     name="[FeF6]4- (Fe(II) d6, illustrative geometry)",
     atoms=tuple(_octahedral("Fe", "F", bond_length=2.00)),
     charge=-4,
-    basis="def2-svp",
+    basis="sto-3g",
     low_spin=SpinState("singlet", 1),
     high_spin=SpinState("quintet", 5),
     n_active_electrons=6,
     n_active_orbitals=5,
-    ao_labels=("Fe 3d", "F 2p"),
-    avas_threshold=0.2,
+    ao_labels=("Fe 3d",),
 )
 
 
