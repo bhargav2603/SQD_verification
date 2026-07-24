@@ -45,9 +45,7 @@ from qdr_core.errors import ValidationError
         (5, 2, (3, 2)),  # doublet
     ],
 )
-def test_alpha_beta_from_spin(
-    n_electrons: int, multiplicity: int, expected: tuple
-) -> None:
+def test_alpha_beta_from_spin(n_electrons: int, multiplicity: int, expected: tuple) -> None:
     assert alpha_beta_from_spin(n_electrons, multiplicity) == expected
 
 
@@ -73,14 +71,10 @@ def _h2_qubit_hamiltonian(integrals: IntegralSet) -> QubitHamiltonian:
     return map_to_qubits(build_fermionic_hamiltonian(integrals, active_space))
 
 
-def test_h2_singlet_sector_is_the_fci_energy(
-    h2_integrals: IntegralSet, golden_h2: dict
-) -> None:
+def test_h2_singlet_sector_is_the_fci_energy(h2_integrals: IntegralSet, golden_h2: dict) -> None:
     """H2's ground state is the singlet (1 alpha, 1 beta); that sector's floor is FCI."""
     hamiltonian = _h2_qubit_hamiltonian(h2_integrals)
-    energy = ground_state_energy_at_spin_sector_matrix_free(
-        hamiltonian, n_alpha=1, n_beta=1
-    )
+    energy = ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha=1, n_beta=1)
     assert energy == pytest.approx(golden_h2["e_fci"], abs=1e-9)
 
 
@@ -100,9 +94,7 @@ def test_spin_sector_matches_dense_restriction() -> None:
         )
         operator += QubitOperator(string, rng.standard_normal())
     operator += hermitian_conjugated(operator)
-    hamiltonian = QubitHamiltonian(
-        operator=operator, n_qubits=n_qubits, mapping="jordan_wigner"
-    )
+    hamiltonian = QubitHamiltonian(operator=operator, n_qubits=n_qubits, mapping="jordan_wigner")
 
     n_alpha, n_beta = 1, 1
     dense = get_sparse_operator(operator, n_qubits=n_qubits).toarray()
@@ -121,9 +113,7 @@ def test_spin_sector_matches_dense_restriction() -> None:
 
 def test_empty_spin_sector_is_rejected() -> None:
     operator = QubitOperator("Z0", 1.0)
-    hamiltonian = QubitHamiltonian(
-        operator=operator, n_qubits=2, mapping="jordan_wigner"
-    )
+    hamiltonian = QubitHamiltonian(operator=operator, n_qubits=2, mapping="jordan_wigner")
     # 2 spatial spin orbitals interleaved -> only 1 alpha slot; asking for 2 is impossible.
     with pytest.raises(ValidationError, match="no basis state"):
         ground_state_energy_at_spin_sector_matrix_free(hamiltonian, n_alpha=2, n_beta=0)
@@ -185,9 +175,7 @@ def test_qdr_engine_matches_pyscf_on_an_open_shell_state() -> None:
 
     # A 2-electron triplet active space keeps the FCI space tiny while still open-shell.
     integrals = compute_integrals(_o2(spin_multiplicity=3), basis="sto-3g")
-    active_space = select_active_space(
-        integrals, n_active_orbitals=4, n_active_electrons=6
-    )
+    active_space = select_active_space(integrals, n_active_orbitals=4, n_active_electrons=6)
     from qdr_compute_engine.active_space.active_space_selector import restrict_integrals
 
     restricted = restrict_integrals(integrals, active_space)

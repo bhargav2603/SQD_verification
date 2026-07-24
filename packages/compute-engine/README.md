@@ -120,7 +120,30 @@ asserts agreement. Two independent derivations, cross-checked.
 specifically is missing and why it did not ship on the first pass. Nothing here silently
 returns a plausible number it cannot justify.
 
+## Scientific trust verdicts
+
+Stage 9 now emits a strict, machine-readable `TRUSTED`, `UNTRUSTED`, or
+`UNDECIDABLE` verdict. Quantitative and embedded-chemistry profiles require
+evidence for basis and active-space convergence, orbital content and nesting,
+spin, dynamic correlation, genuinely independent methods, sampling provenance,
+geometry/environment, and embedding recovery. Missing evidence cannot silently
+pass, and agreement between two solvers for the same Hamiltonian is classified
+as an engine check rather than independent chemical validation.
+
+`notebooks/spin_gap_colab.py` is the Colab entry point. It retains the
+Fe-3d-only/STO-3G octahedral complex as an explicitly untrusted negative
+control, and runs the FeS active-space/basis/dynamic-correlation/SQD campaign as
+an instrumented production case. Every run writes `spin_gap_run.json`, including
+failed runs. A converged number remains `UNDECIDABLE` until all evidence required
+by its selected trust profile has actually been measured.
+
 ## Known limitations
+
+- **Projection embedding is not yet a total-energy solver.** Stage 3b validates
+  the partition and embedding operators, but it does not yet transform a
+  complete embedded Hamiltonian into the active-space energy pipeline. The
+  embedded trust profile therefore requires separate partition-recovery and
+  stability evidence and fails closed when it is absent.
 
 - **No electrostatic embedding in the fragment expansion.** `fmo_runner` computes FMO2 /
   MBE2 — isolated monomers and dimers, no mutual polarisation. For hydrogen-bonded systems

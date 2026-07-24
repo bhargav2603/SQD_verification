@@ -63,9 +63,7 @@ def test_single_pauli_matches_sparse(pauli: str, qubit: int) -> None:
 def test_identity_term_is_a_scalar_multiple() -> None:
     operator = QubitOperator("", 2.5)  # the constant term
     psi = _random_state(2, seed=7)
-    np.testing.assert_allclose(
-        apply_qubit_operator(operator, psi, 2), 2.5 * psi, atol=1e-13
-    )
+    np.testing.assert_allclose(apply_qubit_operator(operator, psi, 2), 2.5 * psi, atol=1e-13)
 
 
 # --------------------------------------------------------------------------------------
@@ -80,8 +78,7 @@ def test_random_hermitian_operator_matches_sparse() -> None:
     operator = QubitOperator("", rng.standard_normal())
     for _ in range(25):
         string = " ".join(
-            f"{rng.choice(paulis)}{q}"
-            for q in sorted(rng.choice(n_qubits, size=2, replace=False))
+            f"{rng.choice(paulis)}{q}" for q in sorted(rng.choice(n_qubits, size=2, replace=False))
         )
         operator += QubitOperator(string, rng.standard_normal())
     # Make it Hermitian: H + H^dagger has real spectrum, which is what a Hamiltonian is.
@@ -99,9 +96,7 @@ def test_apply_matches_sparse_on_h2(h2_integrals: IntegralSet) -> None:
     hamiltonian = _h2_qubit_hamiltonian(h2_integrals)
     psi = _random_state(hamiltonian.n_qubits, seed=11)
 
-    expected = (
-        get_sparse_operator(hamiltonian.operator, n_qubits=hamiltonian.n_qubits) @ psi
-    )
+    expected = get_sparse_operator(hamiltonian.operator, n_qubits=hamiltonian.n_qubits) @ psi
     got = apply_qubit_operator(hamiltonian.operator, psi, hamiltonian.n_qubits)
 
     np.testing.assert_allclose(got, expected, atol=1e-12)
@@ -137,9 +132,7 @@ def test_particle_number_restricted_matches_sparse_path(
     hamiltonian = _h2_qubit_hamiltonian(h2_integrals)
     n_electrons = 2
 
-    sparse_energy = exact_ground_state_energy_at_particle_number(
-        hamiltonian, n_electrons
-    )
+    sparse_energy = exact_ground_state_energy_at_particle_number(hamiltonian, n_electrons)
     matrix_free_energy = ground_state_energy_at_particle_number_matrix_free(
         hamiltonian, n_electrons
     )
@@ -160,12 +153,8 @@ def test_random_hermitian_ground_state_matches_dense() -> None:
         operator += QubitOperator(string, rng.standard_normal())
     operator += hermitian_conjugated(operator)
 
-    hamiltonian = QubitHamiltonian(
-        operator=operator, n_qubits=n_qubits, mapping="jordan_wigner"
-    )
+    hamiltonian = QubitHamiltonian(operator=operator, n_qubits=n_qubits, mapping="jordan_wigner")
     dense = get_sparse_operator(operator, n_qubits=n_qubits).toarray()
     dense_ground = float(np.linalg.eigvalsh(dense)[0])
 
-    assert ground_state_energy_matrix_free(hamiltonian) == pytest.approx(
-        dense_ground, abs=1e-9
-    )
+    assert ground_state_energy_matrix_free(hamiltonian) == pytest.approx(dense_ground, abs=1e-9)

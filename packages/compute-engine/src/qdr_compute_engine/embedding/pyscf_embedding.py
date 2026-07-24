@@ -135,22 +135,16 @@ def build_embedding_artifacts(
 
     active_ao = _active_atom_ao_mask(molecule, active_atom_indices)
     populations = _mulliken_active_population(localized, overlap, active_ao)
-    partition = partition_orbitals_by_population(
-        populations, threshold=population_threshold
-    )
+    partition = partition_orbitals_by_population(populations, threshold=population_threshold)
 
     # AO densities: total, active (active-occupied localized orbitals), environment.
     density_total = np.ascontiguousarray(mean_field.make_rdm1())
     active_occ = localized[:, list(partition.active_indices)]
-    density_active = (
-        2.0 * active_occ @ active_occ.T
-    )  # restricted: 2 electrons per orbital
+    density_active = 2.0 * active_occ @ active_occ.T  # restricted: 2 electrons per orbital
     density_environment = density_total - density_active
 
     potential_total = np.ascontiguousarray(mean_field.get_veff(molecule, density_total))
-    potential_active = np.ascontiguousarray(
-        mean_field.get_veff(molecule, density_active)
-    )
+    potential_active = np.ascontiguousarray(mean_field.get_veff(molecule, density_active))
     projector = levelshift_projector(overlap, density_environment)
 
     h_emb = embed_one_body_operator(
@@ -184,9 +178,7 @@ def build_embedding_artifacts(
     )
 
 
-def _active_atom_ao_mask(
-    molecule: Any, active_atom_indices: tuple[int, ...]
-) -> NDArray[np.bool_]:
+def _active_atom_ao_mask(molecule: Any, active_atom_indices: tuple[int, ...]) -> NDArray[np.bool_]:
     """Boolean mask over AOs: True where the AO is centred on an active atom."""
     n_ao = molecule.nao_nr()
     mask = np.zeros(n_ao, dtype=bool)

@@ -19,6 +19,7 @@ from qdr_compute_engine.pipeline.pipeline import (
 )
 from qdr_compute_engine.pipeline.stage_context import StageContext
 from qdr_compute_engine.types import IntegralSet, ValidationReport
+from qdr_compute_engine.validation.trust import FailureMode, Verdict
 from qdr_core.errors import QubitCapExceeded
 from qdr_core.ids import RunId
 
@@ -196,6 +197,55 @@ def test_validator_warns_that_active_space_error_is_unquantified(
 ) -> None:
     final = run_pipeline(seeded_context, POST_INTEGRAL_STAGES)
     assert any("active-space" in w for w in final.require_validation().warnings)
+
+
+def test_validator_is_undecidable_when_chemistry_evidence_is_absent(
+    seeded_context: StageContext,
+) -> None:
+    """Would fail if the legacy numerical error budget were promoted to scientific trust."""
+    final = run_pipeline(seeded_context, POST_INTEGRAL_STAGES)
+    trust = final.require_validation().trust
+
+    assert trust is not None
+    assert trust.verdict is Verdict.UNDECIDABLE
+    assert trust.profile == "quantitative_chemistry"
+    assert FailureMode.BASIS_NOT_CONVERGED in trust.missing_modes
+    assert FailureMode.ACTIVE_SPACE_NOT_CONVERGED in trust.missing_modes
+
+
+def test_validator_evaluates_machine_readable_evidence_dicts(
+    h2_integrals: IntegralSet,
+) -> None:
+    context = build_context(
+        {
+            "backend": "statevector",
+            "trust_evidence": [
+                {
+                    "code": "engine_crosscheck",
+                    "status": "PASS",
+                    "failure_mode": "ENGINE_DISAGREEMENT",
+                    "value": 1.0e-9,
+                    "threshold": 1.0e-6,
+                    "units": "Ha",
+                    "metadata": {"scope": "engine_only"},
+                },
+                {
+                    "code": "basis",
+                    "status": "FAIL",
+                    "failure_mode": "MINIMAL_BASIS",
+                    "value": "sto-3g",
+                },
+            ],
+        },
+        integrals=h2_integrals,
+    )
+
+    report = run_pipeline(context, POST_INTEGRAL_STAGES).require_validation()
+    payload = report.to_dict()
+
+    assert report.trust is not None
+    assert report.trust.verdict is Verdict.UNTRUSTED
+    assert payload["trust"]["failure_modes"] == ["MINIMAL_BASIS"]
 
 
 def test_binding_energy_is_computed_when_references_are_supplied(

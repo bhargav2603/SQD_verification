@@ -63,8 +63,7 @@ def spin_penalized_hamiltonian(
     target_s_squared = spin * (spin + 1.0)
 
     penalty = shift * (
-        s_squared_qubit_operator(n_spatial_orbitals)
-        - target_s_squared * QubitOperator(())
+        s_squared_qubit_operator(n_spatial_orbitals) - target_s_squared * QubitOperator(())
     )
     penalized = hamiltonian.operator + penalty
     penalized.compress()

@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from qdr_compute_engine.validation.trust import TrustReport
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     pass
 
@@ -46,9 +48,10 @@ class ValidationReport:
     error_budget: ErrorBudget
     within_chemical_accuracy: bool
     warnings: tuple[str, ...] = ()
+    trust: TrustReport | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "binding_energy_ha": self.binding_energy_ha,
             "binding_energy_kcal_per_mol": self.binding_energy_kcal_per_mol,
             "error_budget": dict(self.error_budget.contributions),
@@ -56,3 +59,6 @@ class ValidationReport:
             "within_chemical_accuracy": self.within_chemical_accuracy,
             "warnings": list(self.warnings),
         }
+        if self.trust is not None:
+            payload["trust"] = self.trust.to_dict()
+        return payload

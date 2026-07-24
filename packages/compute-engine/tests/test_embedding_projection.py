@@ -31,9 +31,7 @@ def test_projector_is_s_gamma_s() -> None:
 def test_empty_environment_gives_zero_projector() -> None:
     overlap = np.eye(3)
     zero_env = np.zeros((3, 3))
-    np.testing.assert_array_equal(
-        levelshift_projector(overlap, zero_env), np.zeros((3, 3))
-    )
+    np.testing.assert_array_equal(levelshift_projector(overlap, zero_env), np.zeros((3, 3)))
 
 
 def test_projector_rejects_mismatched_shapes() -> None:
@@ -91,9 +89,7 @@ def test_embedding_rejects_basis_shape_mismatch() -> None:
 
 def test_embedding_rejects_negative_level_shift() -> None:
     with pytest.raises(ValidationError, match="level_shift"):
-        embed_one_body_operator(
-            np.eye(2), np.eye(2), np.eye(2), np.eye(2), level_shift=-1.0
-        )
+        embed_one_body_operator(np.eye(2), np.eye(2), np.eye(2), np.eye(2), level_shift=-1.0)
 
 
 # --------------------------------------------------------------------------------------

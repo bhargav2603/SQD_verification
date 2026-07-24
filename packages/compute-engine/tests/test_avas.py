@@ -39,8 +39,9 @@ def _fef6(spin_multiplicity: int) -> Geometry:
         (0, 0, -1),
     ]
     bond = 2.00
-    atoms = (Atom("Fe", (0.0, 0.0, 0.0)),) + tuple(
-        Atom("F", (d[0] * bond, d[1] * bond, d[2] * bond)) for d in directions
+    atoms = (
+        Atom("Fe", (0.0, 0.0, 0.0)),
+        *(Atom("F", (d[0] * bond, d[1] * bond, d[2] * bond)) for d in directions),
     )
     return Geometry(
         atoms=atoms,
@@ -57,9 +58,7 @@ def test_empty_ao_labels_is_rejected() -> None:
 
 @pytest.mark.requires_pyscf
 def test_avas_selects_a_nontrivial_space_for_o2() -> None:
-    result = avas_active_integrals(
-        _o2(spin_multiplicity=3), ao_labels=["O 2p"], basis="sto-3g"
-    )
+    result = avas_active_integrals(_o2(spin_multiplicity=3), ao_labels=["O 2p"], basis="sto-3g")
 
     assert result.active_space.n_active_orbitals > 0
     assert result.active_space.n_active_electrons > 0
@@ -86,15 +85,16 @@ def test_avas_respects_the_active_orbital_budget() -> None:
     # If capping was needed the threshold was raised above the 0.2 request; either way the
     # recorded value is the one that produced this selection.
     assert result.threshold >= 0.2
+    assert result.requested_threshold == pytest.approx(0.2)
+    assert result.max_active_orbitals == budget
+    assert result.cap_forced == (result.threshold > 0.2)
 
 
 @pytest.mark.requires_pyscf
 def test_avas_converges_for_charged_transition_metal() -> None:
     """Regression: [FeF6]^4- stalls first-order DIIS; the second-order fallback must
     still converge it so AVAS selection does not wrongly raise 'unphysical state'."""
-    result = avas_active_integrals(
-        _fef6(spin_multiplicity=1), ao_labels=["Fe 3d"], basis="sto-3g"
-    )
+    result = avas_active_integrals(_fef6(spin_multiplicity=1), ao_labels=["Fe 3d"], basis="sto-3g")
 
     # The Fe 3d shell is active by construction, so the space is non-trivial and the
     # restricted integrals are self-consistent in size -- i.e. SCF actually converged.
@@ -112,9 +112,7 @@ def test_o2_singlet_solve_is_spin_pure() -> None:
     fix_spin_ penalty in solve_fci must pin it to the actual singlet."""
     from qdr_compute_engine.solvers.classical_baseline import solve_fci
 
-    result = avas_active_integrals(
-        _o2(spin_multiplicity=1), ao_labels=["O 2p"], basis="sto-3g"
-    )
+    result = avas_active_integrals(_o2(spin_multiplicity=1), ao_labels=["O 2p"], basis="sto-3g")
     reference = solve_fci(result.integrals, spin_multiplicity=1)
 
     assert reference.spin_squared == pytest.approx(0.0, abs=1e-3)
@@ -138,9 +136,7 @@ def test_qdr_matches_casci_for_a_spin_projected_singlet() -> None:
         solve_fci,
     )
 
-    result = avas_active_integrals(
-        _o2(spin_multiplicity=1), ao_labels=["O 2p"], basis="sto-3g"
-    )
+    result = avas_active_integrals(_o2(spin_multiplicity=1), ao_labels=["O 2p"], basis="sto-3g")
     restricted = result.integrals
 
     reference = solve_fci(restricted, spin_multiplicity=1)
@@ -172,9 +168,7 @@ def test_fef6_singlet_reference_matches_qdr() -> None:
         solve_fci,
     )
 
-    result = avas_active_integrals(
-        _fef6(spin_multiplicity=1), ao_labels=["Fe 3d"], basis="sto-3g"
-    )
+    result = avas_active_integrals(_fef6(spin_multiplicity=1), ao_labels=["Fe 3d"], basis="sto-3g")
     restricted = result.integrals
 
     reference = solve_fci(restricted, spin_multiplicity=1)
@@ -202,9 +196,7 @@ def test_qdr_matches_casci_in_the_avas_space() -> None:
         solve_fci,
     )
 
-    result = avas_active_integrals(
-        _o2(spin_multiplicity=3), ao_labels=["O 2p"], basis="sto-3g"
-    )
+    result = avas_active_integrals(_o2(spin_multiplicity=3), ao_labels=["O 2p"], basis="sto-3g")
     restricted = result.integrals
 
     reference = solve_fci(restricted, spin_multiplicity=3)

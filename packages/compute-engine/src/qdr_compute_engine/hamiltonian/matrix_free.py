@@ -77,9 +77,7 @@ def _apply_pauli_string(work: State, paulis: tuple[tuple[int, str], ...]) -> Non
             raise ValidationError(f"unknown Pauli letter {letter!r}", letter=letter)
 
 
-def apply_qubit_operator(
-    operator: Any, state: NDArray[np.complex128], n_qubits: int
-) -> State:
+def apply_qubit_operator(operator: Any, state: NDArray[np.complex128], n_qubits: int) -> State:
     """Return ``H @ state`` without materialising ``H``.
 
     ``operator`` is an OpenFermion ``QubitOperator``; ``state`` is a length-``2^n`` vector
@@ -108,9 +106,7 @@ def qubit_operator_as_linear_operator(hamiltonian: QubitHamiltonian) -> LinearOp
     def matvec(vector: NDArray[np.complex128]) -> State:
         return apply_qubit_operator(operator, vector, n_qubits)
 
-    return LinearOperator(
-        (dimension, dimension), matvec=matvec, rmatvec=matvec, dtype=complex
-    )
+    return LinearOperator((dimension, dimension), matvec=matvec, rmatvec=matvec, dtype=complex)
 
 
 def ground_state_energy_matrix_free(hamiltonian: QubitHamiltonian) -> float:
@@ -122,9 +118,7 @@ def ground_state_energy_matrix_free(hamiltonian: QubitHamiltonian) -> float:
     """
     dimension = 2**hamiltonian.n_qubits
     if dimension <= _DENSE_DIMENSION_CEILING:
-        matrix = _dense_from_linear_operator(
-            qubit_operator_as_linear_operator(hamiltonian)
-        )
+        matrix = _dense_from_linear_operator(qubit_operator_as_linear_operator(hamiltonian))
         return float(np.linalg.eigvalsh(matrix)[0])
 
     eigenvalues = eigsh(
@@ -158,9 +152,7 @@ def ground_state_energy_at_particle_number_matrix_free(
             n_electrons=n_electrons,
             n_qubits=n_qubits,
         )
-    return _lowest_eigenvalue_in_sector(
-        hamiltonian.operator, n_qubits, dimension, sector
-    )
+    return _lowest_eigenvalue_in_sector(hamiltonian.operator, n_qubits, dimension, sector)
 
 
 def ground_state_energy_at_spin_sector_matrix_free(
@@ -193,9 +185,7 @@ def ground_state_energy_at_spin_sector_matrix_free(
             n_beta=n_beta,
             n_qubits=n_qubits,
         )
-    return _lowest_eigenvalue_in_sector(
-        hamiltonian.operator, n_qubits, dimension, sector
-    )
+    return _lowest_eigenvalue_in_sector(hamiltonian.operator, n_qubits, dimension, sector)
 
 
 def _hamming_weights(n_qubits: int) -> NDArray[np.int64]:
@@ -241,9 +231,7 @@ def _lowest_eigenvalue_in_sector(
         applied = apply_qubit_operator(operator, full, n_qubits)
         return applied[sector]
 
-    block = LinearOperator(
-        (sector.size, sector.size), matvec=matvec, rmatvec=matvec, dtype=complex
-    )
+    block = LinearOperator((sector.size, sector.size), matvec=matvec, rmatvec=matvec, dtype=complex)
     if sector.size <= _DENSE_DIMENSION_CEILING:
         return float(np.linalg.eigvalsh(_dense_from_linear_operator(block))[0])
 
@@ -271,6 +259,4 @@ def _dense_from_linear_operator(operator: LinearOperator) -> NDArray[np.complex1
     """
     dimension = operator.shape[0]
     identity = np.eye(dimension, dtype=complex)
-    return np.column_stack(
-        [operator @ identity[:, index] for index in range(dimension)]
-    )
+    return np.column_stack([operator @ identity[:, index] for index in range(dimension)])

@@ -29,9 +29,7 @@ def test_stage_03b_sits_between_integrals_and_active_space() -> None:
 
 def test_pass_through_when_no_embedding_config(h2_integrals: IntegralSet) -> None:
     """No embedding config -> the stage returns its input untouched."""
-    ctx = build_context(
-        {"backend": "statevector"}, run_id=RunId("t"), integrals=h2_integrals
-    )
+    ctx = build_context({"backend": "statevector"}, run_id=RunId("t"), integrals=h2_integrals)
     out = stage_03b_embedding.run(ctx)
 
     assert out.integrals is ctx.integrals  # same object, not a copy
@@ -49,16 +47,12 @@ def test_pass_through_keeps_r1_energy_byte_identical(
         integrals=h2_integrals,
     )
     final = run_pipeline(ctx, FROM_INTEGRALS)
-    assert final.require_solve_result().energy == pytest.approx(
-        golden_h2["e_fci"], abs=1.6e-3
-    )
+    assert final.require_solve_result().energy == pytest.approx(golden_h2["e_fci"], abs=1.6e-3)
 
 
 def test_configured_embedding_is_not_yet_implemented(h2_integrals: IntegralSet) -> None:
     """Requesting embedding must fail loudly, not silently pass through."""
-    ctx = build_context(
-        {"embedding": {"scheme": "projection-wf-in-dft"}}, integrals=h2_integrals
-    )
+    ctx = build_context({"embedding": {"scheme": "projection-wf-in-dft"}}, integrals=h2_integrals)
     with pytest.raises(NotImplementedError, match="embedding"):
         stage_03b_embedding.run(ctx)
 

@@ -11,9 +11,10 @@ on:
   # Feature branches are included deliberately. Previously this ran only on `main` and on
   # pull requests, so work on a long-lived branch like `feat/compute-engine-core` was
   # never checked at all -- the H2 correctness gate cannot "fail the build" on a branch
-  # that never triggers a build.
+  # that never triggers a build. `trail-1` is listed by name because it does not match
+  # the `feat/**` or `fix/**` prefixes.
   push:
-    branches: [main, 'feat/**', 'fix/**']
+    branches: [main, trail-1, 'feat/**', 'fix/**']
     paths:
       - "packages/compute-engine/**"
       - "packages/qdr-core/**"

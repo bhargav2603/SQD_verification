@@ -17,19 +17,19 @@ dependency, imported lazily as everywhere else that touches it, so this module s
 on Windows.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
 from qdr_compute_engine.active_space.active_space_selector import restrict_integrals
+from qdr_compute_engine.geometry.pose_builder import to_pyscf_atom_spec
 from qdr_compute_engine.integrals.pyscf_integrals import (
     _require_pyscf,
     chemist_to_physicist,
     run_reference_scf,
 )
-from qdr_compute_engine.geometry.pose_builder import to_pyscf_atom_spec
 from qdr_compute_engine.types import ActiveSpace, Geometry, IntegralSet
 from qdr_core.errors import ValidationError
 
@@ -50,6 +50,19 @@ class AvasResult:
     active_space: ActiveSpace
     ao_labels: tuple[str, ...]
     threshold: float
+    requested_threshold: float | None = None
+    max_active_orbitals: int | None = None
+    #: PySCF provenance retained for orbital optimization and external-space correlation.
+    #: These are deliberately excluded from equality/repr: they are runtime work objects,
+    #: not serializable scientific results.
+    molecule: Any | None = field(default=None, repr=False, compare=False)
+    mean_field: Any | None = field(default=None, repr=False, compare=False)
+    mo_coeff: NDArray[np.float64] | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def cap_forced(self) -> bool:
+        requested = self.threshold if self.requested_threshold is None else self.requested_threshold
+        return self.threshold > requested + 1.0e-12
 
 
 def avas_active_integrals(
@@ -78,9 +91,7 @@ def avas_active_integrals(
     threshold actually used is recorded in the result.
     """
     if not ao_labels:
-        raise ValidationError(
-            "ao_labels is empty; AVAS needs target valence orbitals to select"
-        )
+        raise ValidationError("ao_labels is empty; AVAS needs target valence orbitals to select")
 
     pyscf = _require_pyscf()
     from pyscf import ao2mo
@@ -150,6 +161,11 @@ def avas_active_integrals(
         active_space=active_space,
         ao_labels=tuple(ao_labels),
         threshold=used_threshold,
+        requested_threshold=threshold,
+        max_active_orbitals=max_active_orbitals,
+        molecule=molecule,
+        mean_field=mean_field,
+        mo_coeff=np.asarray(mo_coeff, dtype=float),
     )
 
 

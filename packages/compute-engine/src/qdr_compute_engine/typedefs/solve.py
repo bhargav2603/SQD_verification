@@ -21,6 +21,7 @@ from qdr_compute_engine.typedefs.electronic import (
     QubitHamiltonian,
 )
 from qdr_compute_engine.typedefs.geometry import Geometry  # noqa: F401
+from qdr_core.errors import ValidationError
 
 # --------------------------------------------------------------------------------------
 # Solver request / result
@@ -46,7 +47,22 @@ class SolveRequest:
     shots: int | None = None
     seed: int = 0
     max_iterations: int = 1000
+    #: How many configurations a subspace-diagonalisation backend (SQD) may keep. ``None``
+    #: means "no truncation": take the whole sector, which turns SQD into exact CASCI and is
+    #: what the equals-FCI test pins. It is a *requested* ceiling, not a promise -- the sector
+    #: is often smaller, and a backend reports the dimension it actually used in its metadata.
+    #: Carried on the request rather than in ``options`` because it is the one knob that
+    #: decides whether a returned energy is exact or merely a variational upper bound, and a
+    #: typo in an untyped options key would silently answer the wrong question.
+    subspace_dimension: int | None = None
     options: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.subspace_dimension is not None and self.subspace_dimension < 1:
+            raise ValidationError(
+                f"subspace_dimension must be >= 1 when given, got {self.subspace_dimension}",
+                subspace_dimension=self.subspace_dimension,
+            )
 
     @property
     def n_qubits(self) -> int:

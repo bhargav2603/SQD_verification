@@ -137,10 +137,10 @@ def solve_fci(integrals: IntegralSet, *, spin_multiplicity: int = 1) -> Classica
     # Roots come back energy-ordered, so the first one whose <S^2> matches the request is the
     # lowest state of that spin -- and its penalty contribution is zero, so its energy is
     # physical (the frozen-core-shifted nuclear repulsion in e_nuc is added back below).
-    for root_energy, civec in zip(energies, civecs):
-        spin_squared, multiplicity = fci.spin_square(
-            civec, n_orbitals, (n_alpha, n_beta)
-        )
+    # strict=True: the two come from the same kernel call and must line up. A silent
+    # length mismatch would truncate the root scan and could return the wrong spin state.
+    for root_energy, civec in zip(energies, civecs, strict=True):
+        spin_squared, multiplicity = fci.spin_square(civec, n_orbitals, (n_alpha, n_beta))
         if abs(spin_squared - target_s_squared) < _SPIN_MATCH_TOL:
             return ClassicalResult(
                 energy=float(root_energy) + float(integrals.e_nuc),
