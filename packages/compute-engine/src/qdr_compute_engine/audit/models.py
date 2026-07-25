@@ -20,7 +20,7 @@ from numpy.typing import NDArray
 from qdr_compute_engine.reproducibility.input_hashing import normalize
 from qdr_compute_engine.types import QubitHamiltonian
 from qdr_core.errors import ValidationError
-from qdr_core.provenance import content_hash
+from qdr_core.provenance import content_hash, is_content_hash
 
 
 class SamplerKind(StrEnum):
@@ -311,6 +311,7 @@ class SampleBatch:
 class PostprocessResult:
     """One retained-subspace result from a frozen postprocessor."""
 
+    problem_hash: str
     subspace_dimension: int
     energy: float
     configurations: tuple[int, ...]
@@ -319,6 +320,41 @@ class PostprocessResult:
     n_samples_in_sector: int
     ledger: ResourceLedger = field(default_factory=ResourceLedger)
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not is_content_hash(self.problem_hash):
+            raise ValidationError(
+                "problem_hash must be a canonical content hash",
+                problem_hash=self.problem_hash,
+            )
+        configurations = tuple(int(value) for value in self.configurations)
+        object.__setattr__(self, "configurations", configurations)
+        if (
+            self.subspace_dimension <= 0
+            or len(configurations) != self.subspace_dimension
+        ):
+            raise ValidationError(
+                "subspace_dimension must equal the retained configuration count",
+                subspace_dimension=self.subspace_dimension,
+                configuration_count=len(configurations),
+            )
+        if len(set(configurations)) != len(configurations):
+            raise ValidationError("retained configurations must be unique")
+        if not math.isfinite(self.energy):
+            raise ValidationError(
+                "postprocessed energy must be finite", energy=self.energy
+            )
+        if (
+            self.n_samples < 0
+            or self.n_samples_in_sector < 0
+            or self.n_samples_in_sector > self.n_samples
+        ):
+            raise ValidationError(
+                "postprocessing sample counts are inconsistent",
+                n_samples=self.n_samples,
+                n_samples_in_sector=self.n_samples_in_sector,
+            )
+        object.__setattr__(self, "metadata", _freeze_json(self.metadata))
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,3 +376,44 @@ class AuditObservation:
     configurations: tuple[int, ...]
     ledger: ResourceLedger
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not is_content_hash(self.problem_hash):
+            raise ValidationError(
+                "problem_hash must be a canonical content hash",
+                problem_hash=self.problem_hash,
+            )
+        if self.subspace_dimension <= 0:
+            raise ValidationError(
+                "subspace_dimension must be positive",
+                subspace_dimension=self.subspace_dimension,
+            )
+        if not all(
+            math.isfinite(value)
+            for value in (
+                self.energy,
+                self.reference_energy,
+                self.absolute_error,
+                self.sector_retention,
+            )
+        ):
+            raise ValidationError("observation numerical fields must be finite")
+        if self.absolute_error < 0.0:
+            raise ValidationError(
+                "absolute_error must be non-negative",
+                absolute_error=self.absolute_error,
+            )
+        if not 0.0 <= self.sector_retention <= 1.0:
+            raise ValidationError(
+                "sector_retention must lie in [0, 1]",
+                sector_retention=self.sector_retention,
+            )
+        configurations = tuple(int(value) for value in self.configurations)
+        object.__setattr__(self, "configurations", configurations)
+        if len(configurations) != self.subspace_dimension:
+            raise ValidationError(
+                "observation configuration count must match subspace_dimension",
+                subspace_dimension=self.subspace_dimension,
+                configuration_count=len(configurations),
+            )
+        object.__setattr__(self, "metadata", _freeze_json(self.metadata))
