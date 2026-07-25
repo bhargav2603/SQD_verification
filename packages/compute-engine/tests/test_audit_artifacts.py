@@ -198,9 +198,7 @@ def test_result_accepts_partial_returned_shots_and_checks_register_bounds() -> N
         protocol=original.protocol,
         observations=(partial,),
         comparison=original.comparison,
-        raw_samples={
-            "h2-held-out/exact-state/shots-5/seed-7": np.array([12, 12, 3])
-        },
+        raw_samples={"h2-held-out/exact-state/shots-5/seed-7": np.array([12, 12, 3])},
         environment=original.environment,
         git_commit=original.git_commit,
     )
