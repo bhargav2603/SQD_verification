@@ -159,6 +159,8 @@ def run_audit_cell_with_batch(
                 split=problem.split,
                 seed=seed,
                 shots=budget.shots,
+                shots_returned=batch.shots_returned,
+                n_qubits=batch.n_qubits,
                 subspace_dimension=result.subspace_dimension,
                 energy=result.energy,
                 reference_energy=problem.reference_energy,

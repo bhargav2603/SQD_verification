@@ -34,6 +34,8 @@ def _result() -> AuditResult:
         split=DatasetSplit.HELD_OUT,
         seed=7,
         shots=3,
+        shots_returned=3,
+        n_qubits=4,
         subspace_dimension=2,
         energy=-1.13,
         reference_energy=-1.137,
@@ -102,6 +104,8 @@ def test_scientific_hash_excludes_runtime_measurements() -> None:
         split=observation.split,
         seed=observation.seed,
         shots=observation.shots,
+        shots_returned=observation.shots_returned,
+        n_qubits=observation.n_qubits,
         subspace_dimension=observation.subspace_dimension,
         energy=observation.energy,
         reference_energy=observation.reference_energy,
@@ -163,6 +167,53 @@ def test_result_rejects_raw_samples_that_do_not_cover_observation_cells() -> Non
             observations=original.observations,
             comparison=original.comparison,
             raw_samples={"wrong-cell": np.array([12, 12, 3])},
+            environment=original.environment,
+            git_commit=original.git_commit,
+        )
+
+
+def test_result_accepts_partial_returned_shots_and_checks_register_bounds() -> None:
+    original = _result()
+    observation = original.observations[0]
+    partial = AuditObservation(
+        problem_id=observation.problem_id,
+        problem_hash=observation.problem_hash,
+        source_id=observation.source_id,
+        kind=observation.kind,
+        split=observation.split,
+        seed=observation.seed,
+        shots=5,
+        shots_returned=3,
+        n_qubits=4,
+        subspace_dimension=observation.subspace_dimension,
+        energy=observation.energy,
+        reference_energy=observation.reference_energy,
+        absolute_error=observation.absolute_error,
+        sector_retention=observation.sector_retention,
+        configurations=observation.configurations,
+        ledger=observation.ledger,
+        metadata=observation.metadata,
+    )
+    result = AuditResult(
+        protocol=original.protocol,
+        observations=(partial,),
+        comparison=original.comparison,
+        raw_samples={
+            "h2-held-out/exact-state/shots-5/seed-7": np.array([12, 12, 3])
+        },
+        environment=original.environment,
+        git_commit=original.git_commit,
+    )
+
+    assert len(result.raw_samples) == 1
+    with pytest.raises(ValidationError, match="register"):
+        AuditResult(
+            protocol=original.protocol,
+            observations=(partial,),
+            comparison=original.comparison,
+            raw_samples={
+                "h2-held-out/exact-state/shots-5/seed-7": np.array([16, 12, 3])
+            },
             environment=original.environment,
             git_commit=original.git_commit,
         )

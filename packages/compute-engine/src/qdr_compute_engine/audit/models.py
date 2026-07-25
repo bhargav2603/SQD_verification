@@ -382,6 +382,8 @@ class AuditObservation:
     sector_retention: float
     configurations: tuple[int, ...]
     ledger: ResourceLedger
+    shots_returned: int | None = None
+    n_qubits: int | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -410,6 +412,27 @@ class AuditObservation:
                 "absolute_error must be non-negative",
                 absolute_error=self.absolute_error,
             )
+        shots_returned = (
+            self.shots if self.shots_returned is None else self.shots_returned
+        )
+        if (
+            isinstance(shots_returned, bool)
+            or not isinstance(shots_returned, int)
+            or shots_returned <= 0
+            or shots_returned > self.shots
+        ):
+            raise ValidationError(
+                "shots_returned must be a positive integer no greater than requested shots",
+                shots=self.shots,
+                shots_returned=shots_returned,
+            )
+        object.__setattr__(self, "shots_returned", shots_returned)
+        if self.n_qubits is not None and (
+            isinstance(self.n_qubits, bool)
+            or not isinstance(self.n_qubits, int)
+            or self.n_qubits <= 0
+        ):
+            raise ValidationError("n_qubits must be a positive integer when recorded")
         if not 0.0 <= self.sector_retention <= 1.0:
             raise ValidationError(
                 "sector_retention must lie in [0, 1]",

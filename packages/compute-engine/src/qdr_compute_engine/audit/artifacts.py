@@ -54,6 +54,8 @@ def _observation_to_dict(observation: AuditObservation) -> dict[str, Any]:
         "split": observation.split.value,
         "seed": observation.seed,
         "shots": observation.shots,
+        "shots_returned": observation.shots_returned,
+        "n_qubits": observation.n_qubits,
         "subspace_dimension": observation.subspace_dimension,
         "energy": observation.energy,
         "reference_energy": observation.reference_energy,
@@ -74,6 +76,10 @@ def _observation_from_dict(payload: Mapping[str, Any]) -> AuditObservation:
         split=DatasetSplit(str(payload["split"])),
         seed=int(payload["seed"]),
         shots=int(payload["shots"]),
+        shots_returned=int(payload.get("shots_returned", payload["shots"])),
+        n_qubits=(
+            None if payload.get("n_qubits") is None else int(payload["n_qubits"])
+        ),
         subspace_dimension=int(payload["subspace_dimension"]),
         energy=float(payload["energy"]),
         reference_energy=float(payload["reference_energy"]),
@@ -146,15 +152,27 @@ class AuditResult:
         environment: Mapping[str, Any],
         git_commit: str,
     ) -> None:
-        observation_cells: dict[str, int] = {}
+        observation_cells: dict[str, tuple[int, int]] = {}
         for observation in observations:
             cell_id = (
                 f"{observation.problem_id}/{observation.source_id}/"
                 f"shots-{observation.shots}/seed-{observation.seed}"
             )
-            previous_shots = observation_cells.setdefault(cell_id, observation.shots)
-            if previous_shots != observation.shots:
-                raise ValidationError("observation cell has inconsistent shot counts")
+            n_qubits = observation.n_qubits
+            if n_qubits is None:
+                raise ValidationError(
+                    "bundled observations must record n_qubits",
+                    sample_id=cell_id,
+                )
+            shots_returned = observation.shots_returned
+            if shots_returned is None:  # normalized by AuditObservation
+                raise ValidationError("bundled observations must record shots_returned")
+            cell_contract = (shots_returned, n_qubits)
+            previous_contract = observation_cells.setdefault(cell_id, cell_contract)
+            if previous_contract != cell_contract:
+                raise ValidationError(
+                    "observation cell has inconsistent returned shots or register width"
+                )
         frozen_samples: dict[str, NDArray[np.int64]] = {}
         for key, values in raw_samples.items():
             array = np.asarray(values)
@@ -172,13 +190,20 @@ class AuditResult:
                 missing=sorted(set(observation_cells) - set(frozen_samples)),
                 unexpected=sorted(set(frozen_samples) - set(observation_cells)),
             )
-        for cell_id, shots in observation_cells.items():
-            if frozen_samples[cell_id].size != shots:
+        for cell_id, (shots_returned, n_qubits) in observation_cells.items():
+            if frozen_samples[cell_id].size != shots_returned:
                 raise ValidationError(
-                    "raw sample length must match the observation shot count",
+                    "raw sample length must match shots_returned",
                     sample_id=cell_id,
                     samples=int(frozen_samples[cell_id].size),
-                    shots=shots,
+                    shots_returned=shots_returned,
+                )
+            samples = frozen_samples[cell_id]
+            if bool(np.any(samples < 0)) or bool(np.any(samples >= (1 << n_qubits))):
+                raise ValidationError(
+                    "raw sample lies outside the recorded register",
+                    sample_id=cell_id,
+                    n_qubits=n_qubits,
                 )
         object.__setattr__(self, "protocol", MappingProxyType(dict(protocol)))
         object.__setattr__(self, "observations", tuple(observations))
