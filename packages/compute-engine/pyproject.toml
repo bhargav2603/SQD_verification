@@ -16,6 +16,12 @@ dependencies = [
 # PySCF-dependent tests then auto-skip locally and run for real on Linux CI.
 [project.optional-dependencies]
 chem = ["pyscf>=2.6; sys_platform != 'win32'", "matplotlib>=3.8"]
+audit-qiskit = [
+    "qiskit>=2.4,<3; sys_platform != 'win32'",
+    "qiskit-addon-sqd>=0.12.1,<0.13; sys_platform != 'win32'",
+    "ffsim>=0.0.65; sys_platform != 'win32'",
+    "pyscf>=2.12.1; sys_platform != 'win32'",
+]
 
 [tool.uv.sources]
 qdr-core = { workspace = true }

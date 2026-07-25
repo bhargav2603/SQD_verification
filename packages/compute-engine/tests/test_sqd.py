@@ -756,6 +756,23 @@ def test_campaign_reports_sector_retention_from_the_raw_draw(
     assert campaign.sector_retention == pytest.approx(0.6)
 
 
+def test_campaign_prefixes_follow_sample_frequency_not_configuration_index(
+    h2_hamiltonian: QubitHamiltonian,
+) -> None:
+    raw = np.array([12, 12, 12, 12, 3, 6, 9], dtype=np.int64)
+
+    campaign = run_sqd_campaign(
+        h2_hamiltonian,
+        H2_N_ALPHA,
+        H2_N_BETA,
+        configurations=raw,
+        dimensions=(1, 2, 4),
+    )
+
+    assert campaign.steps[0].configurations == (12,)
+    assert campaign.steps[1].configurations == (3, 12)
+
+
 @pytest.mark.parametrize("dimensions", [(), (0,), (2, 2), (3, 2), (1, 5)])
 def test_campaign_rejects_a_non_nested_or_impossible_dimension_ladder(
     h2_hamiltonian: QubitHamiltonian,

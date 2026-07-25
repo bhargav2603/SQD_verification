@@ -44,3 +44,6 @@ Thumbs.db
 
 # Isolated feature workspaces
 .worktrees/
+
+# Generated sampler-audit evidence (review before intentional release)
+research/sampler-audit/results/
