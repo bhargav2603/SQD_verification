@@ -127,7 +127,9 @@ def test_resource_ledger_keeps_unmeasured_resources_unknown() -> None:
     ("kwargs", "message"),
     [
         ({"shots": 0, "subspace_dimensions": (1,)}, "shots"),
+        ({"shots": 1.5, "subspace_dimensions": (1,)}, "shots"),
         ({"shots": 4, "subspace_dimensions": ()}, "subspace_dimensions"),
+        ({"shots": 4, "subspace_dimensions": (1.5,)}, "positive integers"),
         ({"shots": 4, "subspace_dimensions": (1, 1)}, "strictly increasing"),
         ({"shots": 4, "subspace_dimensions": (2, 1)}, "strictly increasing"),
         ({"shots": 4, "subspace_dimensions": (0, 1)}, "positive"),

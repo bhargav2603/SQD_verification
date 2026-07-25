@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, Iterable
 
@@ -254,20 +254,39 @@ def compare_against_best_classical(
             status=ComparisonStatus.INCONCLUSIVE,
         )
     else:
-        comparison = paired_bootstrap_comparison(
-            quantum=np.asarray(
-                [quantum_held_out[key] for key in common_keys], dtype=float
+        quantum_by_seed: dict[int, list[float]] = defaultdict(list)
+        classical_by_seed: dict[int, list[float]] = defaultdict(list)
+        for key in common_keys:
+            cluster_seed = key[2]
+            quantum_by_seed[cluster_seed].append(quantum_held_out[key])
+            classical_by_seed[cluster_seed].append(classical_held_out[key])
+        cluster_seeds = sorted(quantum_by_seed)
+        comparison = replace(
+            paired_bootstrap_comparison(
+                quantum=np.asarray(
+                    [
+                        np.mean(quantum_by_seed[cluster_seed])
+                        for cluster_seed in cluster_seeds
+                    ],
+                    dtype=float,
+                ),
+                classical=np.asarray(
+                    [
+                        np.mean(classical_by_seed[cluster_seed])
+                        for cluster_seed in cluster_seeds
+                    ],
+                    dtype=float,
+                ),
+                confidence=confidence,
+                n_resamples=n_resamples,
+                seed=seed,
+                min_pairs=min_pairs,
+                quantum_source_id=quantum_source_id,
+                classical_source_id=selected_id,
             ),
-            classical=np.asarray(
-                [classical_held_out[key] for key in common_keys],
-                dtype=float,
+            metric=(
+                "seed_clustered_mean_normalized_log_dimension_auc_absolute_energy_error"
             ),
-            confidence=confidence,
-            n_resamples=n_resamples,
-            seed=seed,
-            min_pairs=min_pairs,
-            quantum_source_id=quantum_source_id,
-            classical_source_id=selected_id,
         )
     return LockedClassicalComparison(
         classical_source_id=selected_id,

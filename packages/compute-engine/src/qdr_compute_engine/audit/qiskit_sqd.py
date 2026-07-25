@@ -107,7 +107,7 @@ def integer_samples_to_bitstrings(
     *,
     n_qubits: int,
 ) -> tuple[str, ...]:
-    """Render QDR integer samples as fixed-width Qiskit big-endian bitstrings."""
+    """Convert QDR interleaved occupations to Qiskit's ``s_beta + s_alpha`` blocks."""
 
     raw = np.asarray(configurations)
     if raw.ndim != 1 or not np.issubdtype(raw.dtype, np.integer):
@@ -122,7 +122,13 @@ def integer_samples_to_bitstrings(
             "configuration lies outside the Qiskit register",
             n_qubits=n_qubits,
         )
-    return tuple(format(int(value), f"0{n_qubits}b") for value in values)
+    bitstrings = []
+    for value in values:
+        interleaved = format(int(value), f"0{n_qubits}b")
+        alpha = interleaved[0::2][::-1]
+        beta = interleaved[1::2][::-1]
+        bitstrings.append(beta + alpha)
+    return tuple(bitstrings)
 
 
 def _load_qiskit_bindings() -> QiskitBindings | None:

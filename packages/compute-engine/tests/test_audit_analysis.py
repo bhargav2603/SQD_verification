@@ -58,6 +58,7 @@ def _curve(
     split: DatasetSplit,
     seed: int,
     errors: tuple[float, float],
+    shots: int = 128,
     kind: SamplerKind = SamplerKind.CLASSICAL_EXCITATION,
 ) -> list[AuditObservation]:
     return [
@@ -68,6 +69,7 @@ def _curve(
             seed=seed,
             dimension=dimension,
             error=error,
+            shots=shots,
             kind=kind,
         )
         for dimension, error in zip((1, 4), errors, strict=True)
@@ -264,3 +266,46 @@ def test_missing_held_out_pair_forces_inconclusive_result() -> None:
 
     assert locked.comparison.status is ComparisonStatus.INCONCLUSIVE
     assert locked.comparison.missing_pairs == 1
+
+
+def test_primary_comparison_counts_independent_seed_clusters_not_budget_cells() -> None:
+    observations: list[AuditObservation] = []
+    for seed in range(5):
+        for problem_id in ("held-a", "held-b"):
+            for shots in (128, 512, 2048):
+                observations += _curve(
+                    problem_id=problem_id,
+                    source_id="classical",
+                    split=DatasetSplit.DEVELOPMENT,
+                    seed=seed,
+                    shots=shots,
+                    errors=(0.4, 0.3),
+                )
+                observations += _curve(
+                    problem_id=problem_id,
+                    source_id="classical",
+                    split=DatasetSplit.HELD_OUT,
+                    seed=seed,
+                    shots=shots,
+                    errors=(0.4, 0.3),
+                )
+                observations += _curve(
+                    problem_id=problem_id,
+                    source_id="quantum",
+                    split=DatasetSplit.HELD_OUT,
+                    seed=seed,
+                    shots=shots,
+                    errors=(0.1, 0.1),
+                    kind=SamplerKind.IDEAL_QUANTUM,
+                )
+
+    locked = compare_against_best_classical(
+        observations,
+        quantum_source_id="quantum",
+        classical_source_ids=("classical",),
+        n_resamples=1_000,
+        min_pairs=30,
+    )
+
+    assert locked.comparison.n_pairs == 5
+    assert locked.comparison.status is ComparisonStatus.INCONCLUSIVE

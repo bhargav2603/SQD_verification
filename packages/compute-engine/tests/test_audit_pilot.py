@@ -20,7 +20,7 @@ PROTOCOL_PATH = (
     Path(__file__).resolve().parents[3]
     / "research"
     / "sampler-audit"
-    / "protocol-v1.json"
+    / "protocol-v2.json"
 )
 
 
@@ -70,9 +70,7 @@ def test_h2_pilot_produces_a_paired_decision_and_verifiable_bundle(
     run = run_protocol(protocol, output_dir=tmp_path)
     loaded = load_audit_bundle(run.bundle.manifest)
 
-    assert run.result.comparison.n_pairs == (
-        len(run.held_out_problem_ids) * len(protocol.shot_budgets) * len(protocol.seeds)
-    )
+    assert run.result.comparison.n_pairs == len(protocol.seeds)
     assert loaded.comparison == run.result.comparison
     assert run.bundle.manifest_hash
     assert run.scientific_hash

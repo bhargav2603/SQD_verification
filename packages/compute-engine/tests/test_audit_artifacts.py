@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -56,7 +58,11 @@ def _result() -> AuditResult:
         protocol={"protocol_version": 1, "title": "test audit"},
         observations=(observation,),
         comparison=comparison,
-        raw_samples={"exact-state/seed-7": np.array([12, 12, 3], dtype=np.int64)},
+        raw_samples={
+            "h2-held-out/exact-state/shots-3/seed-7": np.array(
+                [12, 12, 3], dtype=np.int64
+            )
+        },
         environment={"python": "3.12.test"},
         git_commit="abc123",
     )
@@ -68,7 +74,11 @@ def test_bundle_round_trip_preserves_raw_samples_and_full_precision(tmp_path) ->
     loaded = load_audit_bundle(paths.manifest)
 
     assert loaded.observations == _result().observations
-    assert loaded.raw_samples["exact-state/seed-7"].tolist() == [12, 12, 3]
+    assert loaded.raw_samples["h2-held-out/exact-state/shots-3/seed-7"].tolist() == [
+        12,
+        12,
+        3,
+    ]
     assert loaded.comparison == _result().comparison
 
 
@@ -142,3 +152,31 @@ def test_bundle_refuses_to_overwrite_different_evidence(tmp_path) -> None:
 
     with pytest.raises(ValidationError, match="overwrite"):
         write_audit_bundle(changed, tmp_path)
+
+
+def test_result_rejects_raw_samples_that_do_not_cover_observation_cells() -> None:
+    original = _result()
+
+    with pytest.raises(ValidationError, match="raw sample coverage"):
+        AuditResult(
+            protocol=original.protocol,
+            observations=original.observations,
+            comparison=original.comparison,
+            raw_samples={"wrong-cell": np.array([12, 12, 3])},
+            environment=original.environment,
+            git_commit=original.git_commit,
+        )
+
+
+def test_bundle_hashes_and_verifies_supplemental_report_artifacts(tmp_path) -> None:
+    paths = write_audit_bundle(
+        _result(),
+        tmp_path,
+        supplemental_artifacts={"report": ("report.md", b"# reviewed report\n")},
+    )
+    manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+
+    assert manifest["artifacts"]["report"]["path"] == "report.md"
+    (tmp_path / "report.md").write_text("tampered", encoding="utf-8")
+    with pytest.raises(ValidationError, match="digest"):
+        load_audit_bundle(paths.manifest)

@@ -146,6 +146,15 @@ class AuditResult:
         environment: Mapping[str, Any],
         git_commit: str,
     ) -> None:
+        observation_cells: dict[str, int] = {}
+        for observation in observations:
+            cell_id = (
+                f"{observation.problem_id}/{observation.source_id}/"
+                f"shots-{observation.shots}/seed-{observation.seed}"
+            )
+            previous_shots = observation_cells.setdefault(cell_id, observation.shots)
+            if previous_shots != observation.shots:
+                raise ValidationError("observation cell has inconsistent shot counts")
         frozen_samples: dict[str, NDArray[np.int64]] = {}
         for key, values in raw_samples.items():
             array = np.asarray(values)
@@ -157,6 +166,20 @@ class AuditResult:
             copied = np.array(array, dtype=np.int64, copy=True)
             copied.flags.writeable = False
             frozen_samples[str(key)] = copied
+        if set(frozen_samples) != set(observation_cells):
+            raise ValidationError(
+                "raw sample coverage must exactly match observation cells",
+                missing=sorted(set(observation_cells) - set(frozen_samples)),
+                unexpected=sorted(set(frozen_samples) - set(observation_cells)),
+            )
+        for cell_id, shots in observation_cells.items():
+            if frozen_samples[cell_id].size != shots:
+                raise ValidationError(
+                    "raw sample length must match the observation shot count",
+                    sample_id=cell_id,
+                    samples=int(frozen_samples[cell_id].size),
+                    shots=shots,
+                )
         object.__setattr__(self, "protocol", MappingProxyType(dict(protocol)))
         object.__setattr__(self, "observations", tuple(observations))
         object.__setattr__(self, "comparison", comparison)
@@ -260,10 +283,48 @@ def scientific_result_hash(result: AuditResult) -> str:
     )
 
 
-def write_audit_bundle(result: AuditResult, output_dir: Path) -> AuditBundlePaths:
+def _supplement_manifest(
+    manifest_core: dict[str, Any],
+    supplemental_artifacts: Mapping[str, tuple[str, bytes]],
+) -> None:
+    for name, (filename, data) in supplemental_artifacts.items():
+        if not name or Path(filename).name != filename:
+            raise ValidationError(
+                "supplemental artifact paths must be plain filenames",
+                artifact=name,
+                path=filename,
+            )
+        if name in manifest_core["artifacts"]:
+            raise ValidationError("duplicate audit artifact name", artifact=name)
+        manifest_core["artifacts"][name] = {
+            "path": filename,
+            "digest": hash_bytes(data),
+        }
+
+
+def bundle_manifest_hash(
+    result: AuditResult,
+    *,
+    supplemental_artifacts: Mapping[str, tuple[str, bytes]] | None = None,
+) -> str:
+    """Return the full evidence hash, including timings and rendered attachments."""
+
+    _, _, manifest_core = _bundle_bytes(result)
+    _supplement_manifest(manifest_core, supplemental_artifacts or {})
+    return content_hash(manifest_core)
+
+
+def write_audit_bundle(
+    result: AuditResult,
+    output_dir: Path,
+    *,
+    supplemental_artifacts: Mapping[str, tuple[str, bytes]] | None = None,
+) -> AuditBundlePaths:
     """Write a deterministic bundle, refusing to overwrite different evidence."""
 
     observations_bytes, samples_bytes, manifest_core = _bundle_bytes(result)
+    supplements = supplemental_artifacts or {}
+    _supplement_manifest(manifest_core, supplements)
     manifest_hash = content_hash(manifest_core)
     manifest_payload = {**manifest_core, "manifest_hash": manifest_hash}
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -281,6 +342,8 @@ def write_audit_bundle(result: AuditResult, output_dir: Path) -> AuditBundlePath
             )
     observations_path.write_bytes(observations_bytes)
     samples_path.write_bytes(samples_bytes)
+    for _, (filename, data) in supplements.items():
+        (output_dir / filename).write_bytes(data)
     manifest_path.write_bytes(canonical_json(manifest_payload))
     return AuditBundlePaths(
         manifest=manifest_path,
@@ -305,7 +368,14 @@ def load_audit_bundle(manifest_path: Path) -> AuditResult:
     parent = manifest_path.parent
     artifact_payloads: dict[str, bytes] = {}
     for name, record in manifest["artifacts"].items():
-        data = (parent / record["path"]).read_bytes()
+        artifact_path = Path(record["path"])
+        if artifact_path.name != str(artifact_path):
+            raise ValidationError(
+                "manifest artifact path must be a plain filename",
+                artifact=name,
+                path=str(artifact_path),
+            )
+        data = (parent / artifact_path).read_bytes()
         actual_digest = hash_bytes(data)
         if actual_digest != record["digest"]:
             raise ValidationError(
@@ -331,6 +401,7 @@ def load_audit_bundle(manifest_path: Path) -> AuditResult:
 __all__ = [
     "AuditBundlePaths",
     "AuditResult",
+    "bundle_manifest_hash",
     "load_audit_bundle",
     "scientific_result_hash",
     "write_audit_bundle",

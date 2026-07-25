@@ -7,6 +7,7 @@ import json
 import platform
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -19,6 +20,7 @@ from qdr_compute_engine.audit.analysis import compare_against_best_classical
 from qdr_compute_engine.audit.artifacts import (
     AuditBundlePaths,
     AuditResult,
+    bundle_manifest_hash,
     scientific_result_hash,
     write_audit_bundle,
 )
@@ -45,6 +47,7 @@ from qdr_compute_engine.hamiltonian.fermionic_builder import (
 from qdr_compute_engine.mappers.jordan_wigner import map_to_qubits
 from qdr_compute_engine.solvers.sqd import sector_configurations, solve_sqd
 from qdr_core.errors import ValidationError
+from qdr_core.provenance import hash_bytes
 
 _PROTOCOL_FIELDS = {
     "protocol_version",
@@ -181,9 +184,9 @@ def load_protocol(path: Path) -> AuditProtocol:
         field="classical_rank_weights",
     )
 
-    if payload["protocol_version"] != 1:
+    if payload["protocol_version"] != 2:
         raise ValidationError(
-            "unsupported audit protocol version",
+            "unsupported or superseded audit protocol version; use protocol v2",
             protocol_version=payload["protocol_version"],
         )
     if not isinstance(payload["title"], str) or not payload["title"].strip():
@@ -228,7 +231,7 @@ def load_protocol(path: Path) -> AuditProtocol:
             raise ValidationError(f"{field} must be a non-empty string")
 
     return AuditProtocol(
-        protocol_version=1,
+        protocol_version=2,
         title=payload["title"],
         development_bond_lengths_angstrom=development,
         held_out_bond_lengths_angstrom=held_out,
@@ -303,13 +306,27 @@ def _environment() -> dict[str, Any]:
 
 
 def _git_commit() -> str:
+    source_directory = Path(__file__).resolve().parent
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
+        commit = subprocess.check_output(
+            ["git", "-C", str(source_directory), "rev-parse", "HEAD"],
             text=True,
             encoding="utf-8",
             stderr=subprocess.DEVNULL,
         ).strip()
+        dirty = subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(source_directory),
+                "diff",
+                "--no-ext-diff",
+                "--binary",
+                "HEAD",
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+        return commit if not dirty else f"{commit}:dirty:{hash_bytes(dirty)}"
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
 
@@ -380,13 +397,37 @@ def run_protocol(protocol: AuditProtocol, *, output_dir: Path) -> ProtocolRun:
         git_commit=_git_commit(),
     )
     scientific_hash = scientific_result_hash(result)
-    destination = output_dir / scientific_hash.split(":", maxsplit=1)[-1]
-    bundle = write_audit_bundle(result, destination)
-    (destination / "report.md").write_text(
-        build_audit_markdown(result),
-        encoding="utf-8",
+    with tempfile.TemporaryDirectory(prefix="qdr-audit-report-") as temporary:
+        temporary_path = Path(temporary)
+        temporary_figures = write_audit_figures(result, temporary_path)
+        supplemental_artifacts = {
+            "report": (
+                "report.md",
+                build_audit_markdown(result).encode("utf-8"),
+            ),
+            **{
+                f"figure_{path.suffix.removeprefix('.')}": (
+                    path.name,
+                    path.read_bytes(),
+                )
+                for path in temporary_figures
+            },
+        }
+    full_hash = bundle_manifest_hash(
+        result,
+        supplemental_artifacts=supplemental_artifacts,
     )
-    figures = write_audit_figures(result, destination)
+    destination = output_dir / full_hash.split(":", maxsplit=1)[-1]
+    bundle = write_audit_bundle(
+        result,
+        destination,
+        supplemental_artifacts=supplemental_artifacts,
+    )
+    figures = tuple(
+        destination / filename
+        for _, (filename, _) in supplemental_artifacts.items()
+        if filename.endswith((".png", ".pdf"))
+    )
     held_out_ids = tuple(
         problem.problem_id
         for problem, _ in problem_states

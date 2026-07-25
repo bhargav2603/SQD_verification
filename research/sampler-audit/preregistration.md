@@ -1,4 +1,9 @@
-# Preregistration: determinant-sampler causal audit, protocol v1
+# Preregistration amendment: determinant-sampler causal audit, protocol v2
+
+Protocol v1 was superseded before any publication claim because review identified that
+budgets and systems reuse each seed stream. Version 2 changes only the uncertainty unit:
+all held-out problem/budget effects are averaged within seed, and the 30 independent seed
+clusters are bootstrapped. Prior v1 outputs are not evidence for the v2 decision.
 
 ## Question
 
@@ -25,9 +30,10 @@ locked classical proposal at matched raw shot count?
 
 For every `(held-out problem, shots, seed)` cell, integrate absolute energy error against
 the logarithm of retained dimension using the normalized trapezoid rule. The paired
-effect is exact-state-oracle AUC minus locked-classical AUC.
+effect is exact-state-oracle AUC minus locked-classical AUC. Average all held-out
+problem/budget effects within each seed before inference.
 
-Bootstrap complete paired cells 10,000 times. Report:
+Bootstrap the 30 complete seed-cluster means 10,000 times. Report:
 
 - `quantum_benefit` only when the two-sided 95% interval is entirely below zero;
 - `classical_benefit` only when it is entirely above zero;

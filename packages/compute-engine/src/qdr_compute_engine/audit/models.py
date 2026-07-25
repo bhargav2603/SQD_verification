@@ -105,7 +105,11 @@ class AuditBudget:
     subspace_dimensions: tuple[int, ...]
 
     def __post_init__(self) -> None:
-        if isinstance(self.shots, bool) or self.shots <= 0:
+        if (
+            isinstance(self.shots, bool)
+            or not isinstance(self.shots, int)
+            or self.shots <= 0
+        ):
             raise ValidationError(
                 "shots must be a positive integer",
                 shots=self.shots,
@@ -117,7 +121,10 @@ class AuditBudget:
                 "subspace_dimensions must contain at least one dimension",
                 subspace_dimensions=[],
             )
-        if any(isinstance(value, bool) or value <= 0 for value in dimensions):
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            for value in dimensions
+        ):
             raise ValidationError(
                 "subspace_dimensions must contain positive integers",
                 subspace_dimensions=list(dimensions),

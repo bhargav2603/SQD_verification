@@ -51,11 +51,11 @@ def fermionic_h2(
     )
 
 
-def test_integer_conversion_pins_qiskit_big_endian_bitstrings() -> None:
+def test_integer_conversion_maps_interleaved_qdr_bits_to_qiskit_spin_blocks() -> None:
     assert integer_samples_to_bitstrings(
-        np.array([12, 3], dtype=np.int64),
+        np.array([12, 3, 6, 9], dtype=np.int64),
         n_qubits=4,
-    ) == ("1100", "0011")
+    ) == ("0101", "1010", "0110", "1001")
 
 
 def test_integer_conversion_rejects_out_of_register_values() -> None:

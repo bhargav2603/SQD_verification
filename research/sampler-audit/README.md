@@ -9,7 +9,7 @@ Run from the repository root:
 
 ```powershell
 .\.venv\Scripts\python.exe -m qdr_compute_engine.audit `
-  research/sampler-audit/protocol-v1.json `
+  research/sampler-audit/protocol-v2.json `
   --output research/sampler-audit/results
 ```
 
@@ -17,6 +17,10 @@ The command creates `results/<scientific-hash>/` with raw draws, full-precision
 observations, a tamper-evident manifest, a Markdown report, and PNG/PDF figures.
 The result directory is ignored by Git until an evidence bundle has been independently
 reviewed and intentionally released.
+
+Protocol v1 is retained only as an audit trail. It is superseded because its flat
+cell-level bootstrap did not account for shared seed streams across budgets and systems.
+Protocol v2 bootstraps 30 independent seed clusters.
 
 This pilot answers only whether the experiment machinery isolates a sampler effect.
 H₂/STO-3G has four determinants in the target sector, and the exact-state sampler is
