@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from qdr_compute_engine.audit.models import (
     AuditBudget,
     AuditObservation,
     AuditProblem,
     ResourceLedger,
+    SampleBatch,
 )
 from qdr_compute_engine.audit.postprocessing import AuditPostprocessor
 from qdr_compute_engine.audit.samplers import DeterminantSampler
@@ -60,15 +62,23 @@ def _combine_ledgers(
     )
 
 
-def run_audit_cell(
+@dataclass(frozen=True, slots=True)
+class AuditCellRun:
+    """One sampling event together with all observations derived from that raw draw."""
+
+    batch: SampleBatch
+    observations: tuple[AuditObservation, ...]
+
+
+def run_audit_cell_with_batch(
     problem: AuditProblem,
     sampler: DeterminantSampler,
     budget: AuditBudget,
     *,
     seed: int,
     postprocessor: AuditPostprocessor,
-) -> tuple[AuditObservation, ...]:
-    """Run one frozen ``(problem, sampler, budget, seed)`` cell."""
+) -> AuditCellRun:
+    """Run one frozen cell and preserve the exact raw draw used for post-processing."""
 
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValidationError("seed must be an integer", seed=seed)
@@ -163,7 +173,26 @@ def run_audit_cell(
                 },
             )
         )
-    return tuple(observations)
+    return AuditCellRun(batch=batch, observations=tuple(observations))
+
+
+def run_audit_cell(
+    problem: AuditProblem,
+    sampler: DeterminantSampler,
+    budget: AuditBudget,
+    *,
+    seed: int,
+    postprocessor: AuditPostprocessor,
+) -> tuple[AuditObservation, ...]:
+    """Run one frozen ``(problem, sampler, budget, seed)`` cell."""
+
+    return run_audit_cell_with_batch(
+        problem,
+        sampler,
+        budget,
+        seed=seed,
+        postprocessor=postprocessor,
+    ).observations
 
 
 def run_paired_audit(
@@ -219,4 +248,9 @@ def run_paired_audit(
     return tuple(observations)
 
 
-__all__ = ["run_audit_cell", "run_paired_audit"]
+__all__ = [
+    "AuditCellRun",
+    "run_audit_cell",
+    "run_audit_cell_with_batch",
+    "run_paired_audit",
+]

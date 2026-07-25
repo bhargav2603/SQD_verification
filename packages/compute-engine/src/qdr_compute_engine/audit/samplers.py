@@ -25,8 +25,13 @@ from qdr_core.errors import ValidationError
 class DeterminantSampler(Protocol):
     """A source that emits raw computational-basis configurations."""
 
-    source_id: str
-    kind: SamplerKind
+    @property
+    def source_id(self) -> str:
+        """Stable arm identity recorded in every observation."""
+
+    @property
+    def kind(self) -> SamplerKind:
+        """Scientific category of this sampling arm."""
 
     def sample(
         self, problem: AuditProblem, budget: AuditBudget, seed: int

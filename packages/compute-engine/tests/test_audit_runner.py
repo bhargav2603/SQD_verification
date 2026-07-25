@@ -17,6 +17,7 @@ from qdr_compute_engine.audit.models import (
 )
 from qdr_compute_engine.audit.postprocessing import (
     AuditPostprocessor,
+    CanonicalSectorCompletionPostprocessor,
     QDRSubspacePostprocessor,
 )
 from qdr_compute_engine.audit.runner import run_audit_cell, run_paired_audit
@@ -66,6 +67,30 @@ def test_qdr_postprocessor_records_raw_sample_retention_and_nested_spaces(
     assert all(result.n_samples_in_sector == 5 for result in results)
     assert set(results[0].configurations) < set(results[1].configurations)
     assert set(results[1].configurations) < set(results[2].configurations)
+
+
+def test_sector_completion_preserves_sample_ranking_and_fills_the_locked_ladder(
+    h2_problem: AuditProblem,
+) -> None:
+    budget = AuditBudget(shots=4, subspace_dimensions=(1, 2, 4))
+    batch = ExactStateSampler(_spread_h2_state()).sample(h2_problem, budget, seed=7)
+    batch = replace(
+        batch,
+        configurations=np.array([12, 12, 12, 12], dtype=np.int64),
+    )
+
+    results = CanonicalSectorCompletionPostprocessor().process(
+        h2_problem,
+        batch,
+        budget,
+    )
+
+    assert [result.subspace_dimension for result in results] == [1, 2, 4]
+    assert results[0].configurations == (12,)
+    assert all(result.n_samples == 4 for result in results)
+    assert all(result.n_samples_in_sector == 4 for result in results)
+    assert results[-1].metadata["sampled_distinct_configurations"] == 1
+    assert results[-1].metadata["completed_configurations"] == 3
 
 
 def test_runner_creates_the_same_problem_budget_seed_cells_for_every_sampler(

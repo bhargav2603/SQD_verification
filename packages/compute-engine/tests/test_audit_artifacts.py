@@ -9,6 +9,7 @@ from qdr_compute_engine.audit.analysis import ComparisonStatus, SamplerCompariso
 from qdr_compute_engine.audit.artifacts import (
     AuditResult,
     load_audit_bundle,
+    scientific_result_hash,
     write_audit_bundle,
 )
 from qdr_compute_engine.audit.models import (
@@ -78,6 +79,38 @@ def test_bundle_hash_is_deterministic_for_identical_evidence(tmp_path) -> None:
     assert first.manifest_hash == second.manifest_hash
     assert first.samples.read_bytes() == second.samples.read_bytes()
     assert first.observations.read_bytes() == second.observations.read_bytes()
+
+
+def test_scientific_hash_excludes_runtime_measurements() -> None:
+    original = _result()
+    observation = original.observations[0]
+    replayed_observation = AuditObservation(
+        problem_id=observation.problem_id,
+        problem_hash=observation.problem_hash,
+        source_id=observation.source_id,
+        kind=observation.kind,
+        split=observation.split,
+        seed=observation.seed,
+        shots=observation.shots,
+        subspace_dimension=observation.subspace_dimension,
+        energy=observation.energy,
+        reference_energy=observation.reference_energy,
+        absolute_error=observation.absolute_error,
+        sector_retention=observation.sector_retention,
+        configurations=observation.configurations,
+        ledger=ResourceLedger(cpu_seconds=99.0, wall_seconds=100.0),
+        metadata=observation.metadata,
+    )
+    replayed = AuditResult(
+        protocol=original.protocol,
+        observations=(replayed_observation,),
+        comparison=original.comparison,
+        raw_samples=original.raw_samples,
+        environment=original.environment,
+        git_commit=original.git_commit,
+    )
+
+    assert scientific_result_hash(original) == scientific_result_hash(replayed)
 
 
 def test_bundle_rejects_a_modified_sample_file(tmp_path) -> None:

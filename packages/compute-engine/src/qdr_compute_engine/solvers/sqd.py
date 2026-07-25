@@ -354,6 +354,13 @@ def rank_configurations_by_weight(
     return np.sort(unique[order[:keep]])
 
 
+def _configuration_weight_order(samples: NDArray[np.int64]) -> NDArray[np.int64]:
+    """All distinct configurations in deterministic descending-frequency order."""
+    unique, counts = np.unique(np.asarray(samples, dtype=np.int64), return_counts=True)
+    order = np.lexsort((unique, -counts))
+    return unique[order]
+
+
 # --------------------------------------------------------------------------------------
 # Projection and diagonalisation
 # --------------------------------------------------------------------------------------
@@ -662,7 +669,7 @@ def run_sqd_campaign(
             dimensions=list(requested),
             n_samples=int(drawn.size),
         )
-    ranked = rank_configurations_by_weight(in_sector)
+    ranked = _configuration_weight_order(in_sector)
     if requested[-1] > int(ranked.size):
         raise ValidationError(
             f"dimensions request {requested[-1]} configurations but only {ranked.size} "
@@ -675,7 +682,7 @@ def run_sqd_campaign(
     previous_energy: float | None = None
     full_sector_dimension = sector_dimension(hamiltonian.n_qubits, n_alpha, n_beta)
     for dimension in requested:
-        nested = ranked[:dimension]
+        nested = np.sort(ranked[:dimension])
         outcome, _ = solve_sqd(
             hamiltonian,
             n_alpha,

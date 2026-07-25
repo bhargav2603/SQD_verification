@@ -240,6 +240,26 @@ def _bundle_bytes(result: AuditResult) -> tuple[bytes, bytes, dict[str, Any]]:
     return observations_bytes, samples_bytes, manifest_core
 
 
+def scientific_result_hash(result: AuditResult) -> str:
+    """Hash scientific evidence while excluding non-replayable timing measurements."""
+
+    observations = []
+    for observation in result.observations:
+        payload = _observation_to_dict(observation)
+        payload.pop("ledger")
+        observations.append(payload)
+    return content_hash(
+        {
+            "protocol": _json_value(result.protocol),
+            "observations": observations,
+            "comparison": _comparison_to_dict(result.comparison),
+            "raw_samples_digest": hash_bytes(_deterministic_npz(result.raw_samples)),
+            "environment": _json_value(result.environment),
+            "git_commit": result.git_commit,
+        }
+    )
+
+
 def write_audit_bundle(result: AuditResult, output_dir: Path) -> AuditBundlePaths:
     """Write a deterministic bundle, refusing to overwrite different evidence."""
 
@@ -312,5 +332,6 @@ __all__ = [
     "AuditBundlePaths",
     "AuditResult",
     "load_audit_bundle",
+    "scientific_result_hash",
     "write_audit_bundle",
 ]
