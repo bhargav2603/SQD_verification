@@ -11,7 +11,7 @@ established, the market/science reality from the literature, and the next concre
 ## 1. Where QDR actually is
 
 The compute engine is real and verified. Everything else (control plane, API, web,
-6 of 8 ADRs) is empty scaffolding. See `PR_STATUS.md`.
+6 of 8 ADRs) was empty scaffolding and has since been deleted from the tree.
 
 - 9-stage pipeline + FMO2/MBE2 fragment expansion. Reproduces FCI for H2/STO-3G to ~1e-15.
 - ~7,500 lines, 406 tests passing, mypy clean, 86% coverage.
