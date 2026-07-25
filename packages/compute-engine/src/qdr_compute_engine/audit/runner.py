@@ -90,11 +90,28 @@ def run_audit_cell(
 
     results = postprocessor.process(problem, batch, budget)
     dimensions = tuple(result.subspace_dimension for result in results)
-    if dimensions != budget.subspace_dimensions:
+    dimension_policy = getattr(postprocessor, "dimension_policy", "exact")
+    exact_dimensions_invalid = (
+        dimension_policy == "exact" and dimensions != budget.subspace_dimensions
+    )
+    measured_dimensions_invalid = dimension_policy == "measured" and (
+        len(dimensions) != len(budget.subspace_dimensions)
+        or any(
+            right <= left
+            for left, right in zip(dimensions, dimensions[1:], strict=False)
+        )
+    )
+    if dimension_policy not in {"exact", "measured"}:
+        raise ValidationError(
+            "postprocessor has an unknown dimension policy",
+            dimension_policy=dimension_policy,
+        )
+    if exact_dimensions_invalid or measured_dimensions_invalid:
         raise ValidationError(
             "postprocessor did not return the frozen subspace ladder",
             expected_dimensions=list(budget.subspace_dimensions),
             returned_dimensions=list(dimensions),
+            dimension_policy=dimension_policy,
         )
 
     observations: list[AuditObservation] = []

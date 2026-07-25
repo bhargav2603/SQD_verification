@@ -37,6 +37,16 @@ dev = [
 # the plot code and its tests run on the Windows dev box too.
 chem = ["pyscf>=2.6; sys_platform != 'win32'", "matplotlib>=3.8"]
 
+# Canonical SQD post-processing used by the sampler audit.  The imports remain lazy so
+# the default Windows development environment stays small; chemistry execution belongs
+# on Linux/WSL because PySCF is not natively supported on Windows.
+audit-qiskit = [
+    "qiskit>=2.4,<3; sys_platform != 'win32'",
+    "qiskit-addon-sqd>=0.12.1,<0.13; sys_platform != 'win32'",
+    "ffsim>=0.0.65; sys_platform != 'win32'",
+    "pyscf>=2.12.1; sys_platform != 'win32'",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["packages/qdr-core/tests", "packages/compute-engine/tests"]
 markers = [

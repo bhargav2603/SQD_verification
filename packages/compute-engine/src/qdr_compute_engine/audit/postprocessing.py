@@ -21,6 +21,7 @@ class AuditPostprocessor(Protocol):
     """Classical recovery/diagonalization held fixed across sampler arms."""
 
     postprocessor_id: str
+    dimension_policy: str
 
     def process(
         self,
@@ -36,6 +37,7 @@ class QDRSubspacePostprocessor:
     """QDR's fixed ranking and nested selected-subspace diagonalization."""
 
     postprocessor_id: str = "qdr-fixed-subspace"
+    dimension_policy: str = "exact"
 
     def process(
         self,
