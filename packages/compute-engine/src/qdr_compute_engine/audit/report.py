@@ -78,6 +78,9 @@ def build_audit_markdown(result: AuditResult) -> str:
 def write_audit_figures(result: AuditResult, output_dir: Path) -> tuple[Path, ...]:
     """Write the primary convergence figure in both PNG and PDF formats."""
 
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
     output_dir.mkdir(parents=True, exist_ok=True)
